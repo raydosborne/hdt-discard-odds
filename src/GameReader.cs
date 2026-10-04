@@ -415,7 +415,7 @@ namespace DiscardOdds
 			x.EnemyTaunts = enemyMinions.Count(e => e.GetTag(GameTag.TAUNT) > 0 && e.GetTag(GameTag.STEALTH) == 0);
 			var pe = game.PlayerEntity;
 			x.Mana = Math.Max(0, pe.GetTag(GameTag.RESOURCES) + pe.GetTag(GameTag.TEMP_RESOURCES) - pe.GetTag(GameTag.RESOURCES_USED) - pe.GetTag(GameTag.OVERLOAD_LOCKED));
-			var spellDamage = mine.Sum(e => e.GetTag(GameTag.SPELLPOWER));
+			var spellDamage = mine.Where(e => e.IsMinion || e.IsHero || e.IsWeapon).Sum(e => e.GetTag(GameTag.SPELLPOWER)); // not enchantments (they can carry the tag too)
 			foreach(var h in hand)
 			{
 				try

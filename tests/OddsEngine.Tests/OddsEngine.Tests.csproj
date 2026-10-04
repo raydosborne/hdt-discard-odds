@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Platform-free checks of the odds math, card-text draw parsing, targets.json and settings. Runs anywhere: dotnet run -c Release -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="..\..\src\OddsEngine.cs" Link="OddsEngine.cs" />
+    <!-- ProbeLog.cs (logger + PluginSettings) has no HDT/WPF types, so the settings parsing is tested here too. -->
+    <Compile Include="..\..\src\ProbeLog.cs" Link="ProbeLog.cs" />
+    <Compile Include="..\..\src\TargetConfig.cs" Link="TargetConfig.cs" />
+    <Compile Include="..\..\src\UpdateLogic.cs" Link="UpdateLogic.cs" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,28 @@
+# build output
+bin/
+obj/
+[Bb]in/
+[Oo]bj/
+*.user
+*.suo
+.vs/
+.vscode/
+.idea/
+
+# HDT assemblies are build-time references only; never commit or ship them
+lib/hdt/
+*.dll
+*.exe
+*.pdb
+
+# logs, replays and local plugin settings (personal data)
+logs/
+*.log
+*.jsonl
+settings.ini
+*.hsreplay
+*.hdtreplay
+*.xml.gz
+
+# archives
+*.zip

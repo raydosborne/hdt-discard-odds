@@ -12,5 +12,6 @@
     <Compile Include="..\..\src\ProbeLog.cs" Link="ProbeLog.cs" />
     <Compile Include="..\..\src\TargetConfig.cs" Link="TargetConfig.cs" />
     <Compile Include="..\..\src\UpdateLogic.cs" Link="UpdateLogic.cs" />
+    <Compile Include="..\..\src\LethalEngine.cs" Link="LethalEngine.cs" />
   </ItemGroup>
 </Project>

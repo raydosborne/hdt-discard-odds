@@ -19,6 +19,7 @@ namespace DiscardOdds
 		private readonly TextBlock _title;
 		private readonly TextBlock _main;
 		private readonly TextBlock _sub;
+		private readonly TextBlock _lethal;
 		private readonly PluginSettings _settings;
 		private User32.MouseInput _mouse;
 		private bool _dragging;
@@ -41,9 +42,11 @@ namespace DiscardOdds
 			_title = new TextBlock { Text = "DISCARD ODDS · target cards · if you play it: hit / miss", FontSize = 10, Foreground = new SolidColorBrush(Color.FromRgb(0xB9, 0x9C, 0xE0)), FontWeight = FontWeights.SemiBold };
 			_main = new TextBlock { Text = "Targets left in deck: –", FontSize = 15, Foreground = Brushes.White, FontWeight = FontWeights.Bold };
 			_sub = new TextBlock { Text = "", FontSize = 12, Foreground = new SolidColorBrush(Color.FromRgb(0xDD, 0xDD, 0xDD)), TextWrapping = TextWrapping.Wrap, MaxWidth = 430 };
+			_lethal = new TextBlock { FontSize = 13, TextWrapping = TextWrapping.Wrap, MaxWidth = 430, Visibility = Visibility.Collapsed, Margin = new Thickness(0, 1, 0, 1) };
 			var stack = new StackPanel();
 			stack.Children.Add(_title);
 			stack.Children.Add(_main);
+			stack.Children.Add(_lethal);
 			stack.Children.Add(_sub);
 			Child = stack;
 			Effect = new System.Windows.Media.Effects.DropShadowEffect { BlurRadius = 6, ShadowDepth = 1, Opacity = 0.7 };
@@ -86,6 +89,22 @@ namespace DiscardOdds
 		{
 			_main.Text = main;
 			_sub.Text = sub;
+		}
+
+		/// <summary>Lethal-check line (null hides it). Lethal is highlighted; the detail is a smaller second line.</summary>
+		public void SetLethal(string line, string detail, bool lethal)
+		{
+			if(line == null) { _lethal.Visibility = Visibility.Collapsed; return; }
+			_lethal.Inlines.Clear();
+			_lethal.Inlines.Add(new System.Windows.Documents.Run(line)
+			{
+				FontWeight = lethal ? FontWeights.Bold : FontWeights.SemiBold,
+				Foreground = lethal ? new SolidColorBrush(Color.FromRgb(0xFF, 0xD7, 0x40)) : new SolidColorBrush(Color.FromRgb(0xF0, 0xF0, 0xF0))
+			});
+			if(!string.IsNullOrEmpty(detail))
+				_lethal.Inlines.Add(new System.Windows.Documents.Run("\n" + detail) { FontSize = 11, Foreground = new SolidColorBrush(Color.FromRgb(0xC8, 0xC8, 0xC8)) });
+			_lethal.Background = lethal ? new SolidColorBrush(Color.FromArgb(0x55, 0x8A, 0x6A, 0x00)) : Brushes.Transparent;
+			_lethal.Visibility = Visibility.Visible;
 		}
 
 		public void SetUnlocked(bool unlocked)

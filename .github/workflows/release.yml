@@ -1,0 +1,93 @@
+# Builds DiscardOdds.dll against a pinned Hearthstone Deck Tracker release and publishes it, with a SHA-256
+# checksum, as a GitHub Release. The in-plugin updater reads exactly these two assets.
+#
+# Release a new version either way:
+#   * push a tag:   git tag v0.2.0 && git push origin v0.2.0
+#   * or Actions -> Release -> "Run workflow" with tag v0.2.0 (the tag is created on the selected branch)
+# The tag (vMAJOR.MINOR.PATCH) becomes the assembly version, which is what the updater compares.
+name: Release
+
+on:
+  push:
+    tags: ['v*.*.*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Version tag to build and release, e.g. v0.2.0'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      # HDT build referenced at compile time (references only; HDT files are never published).
+      HDT_VERSION: '1.55.6'
+      HDT_ZIP_SHA256: '3ebf12fa3d5e842f1fa8ce433758640e3ce2903a400dac5fb096822149d2bb60'
+      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+      DOTNET_NOLOGO: '1'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Resolve version from tag
+        id: v
+        shell: bash
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          TAG="${INPUT_TAG:-$REF_NAME}"
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Tag '$TAG' is not vMAJOR.MINOR.PATCH"; exit 1
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Fetch HDT reference assemblies
+        shell: bash
+        run: |
+          curl -fsSL -o hdt.zip "https://github.com/HearthSim/Hearthstone-Deck-Tracker/releases/download/v${HDT_VERSION}/Hearthstone.Deck.Tracker-v${HDT_VERSION}.zip"
+          echo "${HDT_ZIP_SHA256}  hdt.zip" | sha256sum -c -
+          mkdir -p lib/hdt
+          unzip -j -o hdt.zip "Hearthstone Deck Tracker/Hearthstone Deck Tracker.exe" "Hearthstone Deck Tracker/HearthDb.dll" -d lib/hdt
+          rm hdt.zip
+
+      - name: Test
+        run: dotnet run --project tests/OddsEngine.Tests -c Release
+
+      - name: Build
+        shell: bash
+        env:
+          VERSION: ${{ steps.v.outputs.version }}
+        run: |
+          dotnet build DiscardOdds.csproj -c Release \
+            -p:Version="$VERSION" -p:AssemblyVersion="$VERSION.0" -p:FileVersion="$VERSION.0" \
+            -p:ContinuousIntegrationBuild=true -p:PathMap="$PWD=/_/"
+          mkdir -p dist
+          cp bin/Release/DiscardOdds.dll dist/
+          cd dist
+          sha256sum DiscardOdds.dll > DiscardOdds.dll.sha256
+          cat DiscardOdds.dll.sha256
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.v.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          name: Discard Odds ${{ steps.v.outputs.tag }}
+          make_latest: 'true'
+          fail_on_unmatched_files: true
+          files: |
+            dist/DiscardOdds.dll
+            dist/DiscardOdds.dll.sha256
+          body: |
+            **Install:** put `DiscardOdds.dll` in `%AppData%\HearthstoneDeckTracker\Plugins\DiscardOdds\`, restart HDT, enable it under Options → Tracker → Plugins.
+            **Already installed?** The plugin checks this page on HDT start and (with Auto-update on) installs the new DLL itself; restart HDT to finish updating.
+
+            Built by GitHub Actions against Hearthstone Deck Tracker ${{ env.HDT_VERSION }}. `DiscardOdds.dll.sha256` is the SHA-256 the updater verifies.

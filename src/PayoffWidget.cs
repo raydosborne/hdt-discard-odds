@@ -51,15 +51,15 @@ namespace DiscardOdds
 	}
 
 	/// <summary>
-	/// One compact overlay widget: header "Next draw  hit / miss · targets left", the lethal line on your turn, one line
-	/// per odds card in hand, and the opening one-drop line. Reasons are hidden unless "Show details" is on.
+	/// Overlay widget (Compact mode default): short header "Next hit% · n/m", the lethal line on your turn, one short
+	/// line per odds card in hand, and the opening one-drop line. Reasons are hidden unless "Show details" is on.
 	/// Built in code (no XAML) so the project compiles with the plain .NET SDK.
 	/// Drag: unlock via the Plugins menu. While unlocked, a low-level mouse hook (HDT's own User32.MouseInput,
 	/// the same approach as the DrawPool plugin) moves the widget; position is saved as fractions of the overlay size.
 	/// </summary>
 	public class PayoffWidget : Border
 	{
-		private const double MaxW = 400;
+		private double MaxW => _settings.CompactMode ? 280 : 360;
 		private readonly TextBlock _title;
 		private readonly StackPanel _header;
 		private readonly StackPanel _rows;
@@ -79,14 +79,14 @@ namespace DiscardOdds
 			BorderBrush = new SolidColorBrush(Color.FromArgb(0xFF, 0x8E, 0x5B, 0xC9));
 			BorderThickness = new Thickness(1.5);
 			CornerRadius = new CornerRadius(6);
-			Padding = new Thickness(7, 3, 7, 4);
 			IsHitTestVisible = false;
 			SnapsToDevicePixels = true;
 
 			// The title only shows while unlocked (drag hint), to keep the widget small.
-			_title = new TextBlock { Text = "DISCARD ODDS · drag me, then lock via Plugins menu", FontSize = 10, Foreground = new SolidColorBrush(Color.FromRgb(0xB9, 0x9C, 0xE0)), FontWeight = FontWeights.SemiBold, Visibility = Visibility.Collapsed };
+			_title = new TextBlock { Foreground = new SolidColorBrush(Color.FromRgb(0xB9, 0x9C, 0xE0)), FontWeight = FontWeights.SemiBold, Visibility = Visibility.Collapsed };
 			_header = new StackPanel();
-			_lethal = new TextBlock { FontSize = 13, TextWrapping = TextWrapping.Wrap, MaxWidth = MaxW, Visibility = Visibility.Collapsed };
+			_lethal = new TextBlock { TextWrapping = TextWrapping.Wrap, Visibility = Visibility.Collapsed };
+			ApplyChrome();
 			_rows = new StackPanel();
 			var stack = new StackPanel();
 			stack.Children.Add(_title);
@@ -97,20 +97,34 @@ namespace DiscardOdds
 			Effect = new System.Windows.Media.Effects.DropShadowEffect { BlurRadius = 6, ShadowDepth = 1, Opacity = 0.7 };
 		}
 
+		/// <summary>Padding, fonts and max width for Compact mode (default) vs roomy mode.</summary>
+		private void ApplyChrome()
+		{
+			var compact = _settings.CompactMode;
+			Padding = compact ? new Thickness(4, 2, 4, 2) : new Thickness(7, 3, 7, 4);
+			_title.Text = compact ? "Odds · drag, then lock" : "DISCARD ODDS · drag me, then lock via Plugins menu";
+			_title.FontSize = compact ? 9 : 10;
+			_lethal.FontSize = compact ? 11 : 13;
+			_lethal.MaxWidth = MaxW;
+		}
+
 		/// <summary>Replaces the widget's lines (the lethal line is set separately).</summary>
 		public void SetContent(WidgetContent c)
 		{
+			ApplyChrome();
 			_header.Children.Clear();
 			_rows.Children.Clear();
-			if(c.Header != null) _header.Children.Add(RowBlock(c.Header, 14));
+			var headSize = _settings.CompactMode ? 11.5 : 13;
+			var rowSize = _settings.CompactMode ? 11 : 12.5;
+			if(c.Header != null) _header.Children.Add(RowBlock(c.Header, headSize));
 			foreach(var r in c.Rows)
 			{
 				if(r.DetailOnly && !_settings.ShowDetails) continue;
-				_rows.Children.Add(RowBlock(r, 13));
+				_rows.Children.Add(RowBlock(r, rowSize));
 			}
 			if(_settings.ShowDetails)
 			{
-				var legend = new TextBlock { FontSize = 10, Margin = new Thickness(0, 2, 0, 0), TextWrapping = TextWrapping.Wrap, MaxWidth = MaxW };
+				var legend = new TextBlock { FontSize = _settings.CompactMode ? 9 : 10, Margin = new Thickness(0, 1, 0, 0), TextWrapping = TextWrapping.Wrap, MaxWidth = MaxW };
 				legend.Inlines.Add(new Run("card") { Foreground = WidgetColors.CardName });
 				legend.Inlines.Add(new Run(" · ") { Foreground = WidgetColors.Dim });
 				legend.Inlines.Add(new Run("hit %") { Foreground = WidgetColors.Hit, FontWeight = FontWeights.Bold });
@@ -127,46 +141,50 @@ namespace DiscardOdds
 
 		private TextBlock RowBlock(WidgetRow r, double size)
 		{
-			var tb = new TextBlock { TextWrapping = TextWrapping.Wrap, MaxWidth = MaxW, FontSize = size };
+			var compact = _settings.CompactMode;
+			var small = compact ? size - 0.5 : (r.Small ? 11 : size);
+			var detailSize = compact ? 9 : 10.5;
+			var hitBump = compact ? 0.5 : 1.0;
+			var tb = new TextBlock { TextWrapping = TextWrapping.Wrap, MaxWidth = MaxW, FontSize = size, LineHeight = compact ? size + 2 : double.NaN };
 			if(r.Text != null)
 			{
 				if(r.Name != null)
-					tb.Inlines.Add(new Run(r.Name + " ") { Foreground = r.NameIsLabel ? WidgetColors.Text : WidgetColors.CardName, FontWeight = FontWeights.SemiBold, FontSize = r.Small ? 11.5 : size });
+					tb.Inlines.Add(new Run(r.Name + " ") { Foreground = r.NameIsLabel ? WidgetColors.Text : WidgetColors.CardName, FontWeight = FontWeights.SemiBold, FontSize = r.Small ? small : size });
 				tb.Inlines.Add(new Run(r.Text)
 				{
 					Foreground = r.TextColor ?? WidgetColors.Light,
 					FontWeight = r.Bold ? FontWeights.Bold : FontWeights.Normal,
-					FontSize = r.Small ? 11.5 : size
+					FontSize = r.Small ? small : size
 				});
 			}
 			else
 			{
 				var hit = Math.Max(0, Math.Min(1, r.Hit ?? 0));
-				tb.Inlines.Add(new Run((r.Name ?? "?") + (r.NoOdds ? "" : "  ")) { Foreground = r.NameIsLabel ? WidgetColors.Text : WidgetColors.CardName, FontWeight = FontWeights.SemiBold });
+				tb.Inlines.Add(new Run((r.Name ?? "?") + (r.NoOdds ? "" : " ")) { Foreground = r.NameIsLabel ? WidgetColors.Text : WidgetColors.CardName, FontWeight = FontWeights.SemiBold });
 				if(!r.NoOdds)
 				{
-					tb.Inlines.Add(new Run(OddsEngine.Pct(hit)) { Foreground = WidgetColors.Hit, FontWeight = FontWeights.Bold, FontSize = size + 1.5 });
-					tb.Inlines.Add(new Run(" / ") { Foreground = WidgetColors.Dim });
+					tb.Inlines.Add(new Run(OddsEngine.Pct(hit)) { Foreground = WidgetColors.Hit, FontWeight = FontWeights.Bold, FontSize = size + hitBump });
+					tb.Inlines.Add(new Run("/") { Foreground = WidgetColors.Dim });
 					tb.Inlines.Add(new Run(OddsEngine.Pct(1 - hit)) { Foreground = WidgetColors.Miss, FontWeight = FontWeights.SemiBold });
-					if(r.Approx) tb.Inlines.Add(new Run(" ≈") { Foreground = WidgetColors.Dim });
+					if(r.Approx) tb.Inlines.Add(new Run("≈") { Foreground = WidgetColors.Dim });
 				}
 				if(r.NoOdds && (r.DiscardNames == null || r.DiscardNames.Count == 0))
-					tb.Inlines.Add(new Run(" → nothing to discard") { Foreground = WidgetColors.Dim });
+					tb.Inlines.Add(new Run(" → —") { Foreground = WidgetColors.Dim });
 				if(r.DiscardNames != null && r.DiscardNames.Count > 0 && r.DiscardRule != null)
 				{
 					var color = r.DiscardRule == "lowest" ? WidgetColors.Lowest : WidgetColors.Highest;
-					tb.Inlines.Add(new Run(r.NoOdds ? " → " : "  → ") { Foreground = WidgetColors.Dim });
+					tb.Inlines.Add(new Run(" → ") { Foreground = WidgetColors.Dim });
 					for(var i = 0; i < r.DiscardNames.Count; i++)
 					{
-						if(i > 0) tb.Inlines.Add(new Run(" / ") { Foreground = WidgetColors.Dim });
+						if(i > 0) tb.Inlines.Add(new Run("/") { Foreground = WidgetColors.Dim });
 						tb.Inlines.Add(new Run(r.DiscardNames[i].name) { Foreground = color, FontWeight = r.DiscardNames[i].target ? FontWeights.Bold : FontWeights.Normal });
 					}
 				}
-				if(!string.IsNullOrEmpty(r.Suffix))
-					tb.Inlines.Add(new Run("   " + r.Suffix) { Foreground = WidgetColors.Light, FontSize = 11.5, FontWeight = FontWeights.Normal });
+				if(!string.IsNullOrEmpty(r.Suffix) && (!compact || _settings.ShowDetails))
+					tb.Inlines.Add(new Run((compact ? " · " : "  ") + r.Suffix) { Foreground = WidgetColors.Light, FontSize = small, FontWeight = FontWeights.Normal });
 			}
 			if(_settings.ShowDetails && !string.IsNullOrEmpty(r.Detail))
-				tb.Inlines.Add(new Run("\n   " + r.Detail) { FontSize = 10.5, Foreground = WidgetColors.Dim, FontWeight = FontWeights.Normal });
+				tb.Inlines.Add(new Run("\n " + r.Detail) { FontSize = detailSize, Foreground = WidgetColors.Dim, FontWeight = FontWeights.Normal });
 			return tb;
 		}
 
@@ -210,7 +228,7 @@ namespace DiscardOdds
 			_lethal.Inlines.Clear();
 			_lethal.Inlines.Add(new Run(line) { FontWeight = FontWeights.Bold, Foreground = lethal ? WidgetColors.Hit : WidgetColors.Miss });
 			if(_settings.ShowDetails && !string.IsNullOrEmpty(detail))
-				_lethal.Inlines.Add(new Run("\n   " + detail) { FontSize = 10.5, FontWeight = FontWeights.Normal, Foreground = WidgetColors.Dim });
+				_lethal.Inlines.Add(new Run("\n " + detail) { FontSize = _settings.CompactMode ? 9 : 10.5, FontWeight = FontWeights.Normal, Foreground = WidgetColors.Dim });
 			_lethal.Visibility = Visibility.Visible;
 		}
 

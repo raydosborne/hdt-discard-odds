@@ -35,6 +35,11 @@ namespace DiscardOdds
 		public bool Approx;   // model not verified against game rules yet, or the draw is conditional (flagged with ≈)
 		public string Clause; // generic rules: text before the draw, e.g. "Deathrattle" (shown in the detail)
 		public bool Generic;  // built from card text by DrawText.Parse
+		/// <summary>"When you play or discard this, draw N" (Hand of Gul'dan): one line labelled "(discard)" with the discard odds;
+		/// the played odds go into the detail only.</summary>
+		public bool OnDiscard;
+		/// <summary>Show only the card(s) it would discard now, never percentages (Chronoclaws).</summary>
+		public bool NamesOnly;
 
 		/// <summary>Card-specific models (discard outlets and special draws). These win over the generic text rule.</summary>
 		public static readonly Dictionary<string, OddsRule> CardRules = new[]
@@ -44,14 +49,14 @@ namespace DiscardOdds
 			new OddsRule { CardId = "TLC_451", Name = "Cursed Catacombs", Kind = OddsKind.DiscoverFromDeck, Approx = true, Text = "Discover another card from your deck. Make it Temporary." },
 			new OddsRule { CardId = "DMF_119", Name = "Wicked Whispers", Kind = OddsKind.DiscardLowest, Text = "Discard your lowest Cost card. Give your minions +1/+1." },
 			new OddsRule { CardId = "ULD_163", Name = "Expired Merchant", Kind = OddsKind.DiscardHighest, Text = "Battlecry: Discard your highest Cost card. Deathrattle: Add 2 copies of it to your hand." },
-			new OddsRule { CardId = "END_016", Name = "Chronoclaws", Kind = OddsKind.DiscardHighest, Text = "After your hero attacks, discard your highest Cost card." },
+			new OddsRule { CardId = "END_016", Name = "Chronoclaws", Kind = OddsKind.DiscardHighest, NamesOnly = true, Text = "After your hero attacks, discard your highest Cost card." },
 			new OddsRule { CardId = "EX1_308", Name = "Soulfire", Kind = OddsKind.DiscardRandom, Text = "Deal 4 damage. Discard a random card." },
 			new OddsRule { CardId = "OG_109", Name = "Darkshire Librarian", Kind = OddsKind.DiscardRandom, Text = "Battlecry: Discard a random card. Deathrattle: Draw a card." },
 			new OddsRule { CardId = "CATA_490", Name = "Ocular Occultist", Kind = OddsKind.DiscardChoose, Text = "Taunt. Battlecry: Choose a card in your hand to discard." },
 			new OddsRule { CardId = "CATA_897", Name = "Gemstone Hoarder", Kind = OddsKind.DiscardChoose, Text = "Battlecry: Choose a card in your hand to discard. Deathrattle: Get it back. It costs (1) less." },
 			new OddsRule { CardId = "WON_103", Name = "Chamber of Viscidus", Kind = OddsKind.DiscardLook3, Approx = true, Text = "Look at 3 cards in your hand and choose one to discard. Draw two cards." },
 			new OddsRule { CardId = "LOOT_014", Name = "Kobold Librarian", Kind = OddsKind.DrawK, K = 1, Text = "Battlecry: Draw a card. Deal 2 damage to your hero." },
-			new OddsRule { CardId = "BT_300", Name = "Hand of Gul'dan", Kind = OddsKind.DrawK, K = 3, Text = "When you play or discard this, draw 3 cards." },
+			new OddsRule { CardId = "BT_300", Name = "Hand of Gul'dan", Kind = OddsKind.DrawK, K = 3, OnDiscard = true, Text = "When you play or discard this, draw 3 cards." },
 			new OddsRule { CardId = "TOY_916", Name = "Sketch Artist", Kind = OddsKind.DrawShadowSpell, Approx = true, Text = "Battlecry: Draw a Shadow spell. Get a Temporary copy of it." },
 		}.ToDictionary(r => r.CardId);
 
@@ -62,7 +67,15 @@ namespace DiscardOdds
 			if(CardRules.TryGetValue(cardId, out var specific)) return specific;
 			var d = DrawText.Parse(cardText);
 			if(d == null) return null;
-			return new OddsRule { CardId = cardId, Name = name ?? cardId, Kind = OddsKind.DrawK, K = d.Count, Approx = d.Conditional, Clause = d.Clause, Generic = true, Text = cardText };
+			var r = new OddsRule { CardId = cardId, Name = name ?? cardId, Kind = OddsKind.DrawK, K = d.Count, Approx = d.Conditional, Clause = d.Clause, Generic = true, Text = cardText };
+			// "When you play or discard this, draw N": the trigger is the discard itself, not a condition on the draw.
+			if(d.Clause != null && Regex.IsMatch(d.Clause, @"^when you (play or )?discard this$", RegexOptions.IgnoreCase))
+			{
+				r.OnDiscard = true;
+				r.Clause = null;
+				r.Approx = false;
+			}
+			return r;
 		}
 	}
 
@@ -146,8 +159,14 @@ namespace DiscardOdds
 	public sealed class CardOdds
 	{
 		public string CardId;
+		public int EntityId;      // the hand copy this line is for (one line per entity, never two)
 		public string Name;
 		public OddsKind Kind;
+		/// <summary>Hit is 100% only because you pick the discarded card (Ocular Occultist, Gemstone Hoarder): shown only with Show details.</summary>
+		public bool ByChoice;
+		/// <summary>No percentages on the widget, only "→ card(s) it would discard": Chronoclaws always, a highest-Cost
+		/// discard whenever the result is certain (no tie between a target and a non-target).</summary>
+		public bool NoOdds;
 		public double Hit;        // P(effect hits a group card)
 		public double Miss => 1 - Hit;
 		public double ExpectedHits;
@@ -190,7 +209,7 @@ namespace DiscardOdds
 			// exceed it (HDT updates PlayerCardList after DeckCount); callers wait for a settled list, and n is clamped.
 			var m = s.DeckCount;
 			var n = Math.Min(m, s.Deck.Where(kv => s.Group.Contains(kv.Key)).Sum(kv => kv.Value));
-			var r = new CardOdds { CardId = rule.CardId, Name = rule.Name, Kind = rule.Kind, Approx = rule.Approx };
+			var r = new CardOdds { CardId = rule.CardId, EntityId = playedEntityId, Name = rule.Name, Kind = rule.Kind, Approx = rule.Approx };
 
 			switch(rule.Kind)
 			{
@@ -203,6 +222,13 @@ namespace DiscardOdds
 					r.Detail = (rule.Clause != null ? rule.Clause + ": " : "") + $"{n} targets in {m} cards, draw {k}";
 					if(rule.Kind == OddsKind.DrawThenDiscardIt)
 						r.Detail += "; on death it discards the drawn card";
+					if(rule.OnDiscard)
+					{
+						// Discarding draws the same k cards as playing it, so the odds are identical; the line is labelled
+						// by how it's used (discarded), and the played odds stay in the detail.
+						r.Name = rule.Name + " (discard)";
+						r.Detail = $"if discarded: {n} targets in {m} cards, draw {k} · if played: same {k} draws, {Pct(r.Hit)} / {Pct(1 - r.Hit)}";
+					}
 					break;
 				}
 				case OddsKind.DrawShadowSpell:
@@ -230,7 +256,7 @@ namespace DiscardOdds
 				case OddsKind.DiscardLowest:
 				case OddsKind.DiscardHighest:
 				{
-					if(others.Count == 0) { r.Hit = 0; r.Detail = "hand empty, nothing to discard"; break; }
+					if(others.Count == 0) { r.Hit = 0; r.NoOdds = rule.NamesOnly || rule.Kind == OddsKind.DiscardHighest; r.Detail = "hand empty, nothing to discard"; break; }
 					var target = rule.Kind == OddsKind.DiscardLowest ? others.Min(h => h.Cost) : others.Max(h => h.Cost);
 					var tied = others.Where(h => h.Cost == target).ToList();
 					var hits = tied.Count(h => h.InGroup);
@@ -240,6 +266,9 @@ namespace DiscardOdds
 					r.DiscardNames = tied.Select(h => (h.Name, h.InGroup)).ToList();
 					r.Detail = (rule.Kind == OddsKind.DiscardLowest ? "lowest" : "highest") + $" cost {target}: " +
 					           string.Join(", ", tied.Select(h => h.Name + (h.InGroup ? "*" : ""))) + (tied.Count > 1 ? " (tie)" : "");
+					var certain = hits == 0 || hits == tied.Count;
+					r.NoOdds = rule.NamesOnly || (rule.Kind == OddsKind.DiscardHighest && certain);
+					if(r.NoOdds && !certain) r.Detail += $" · target {Pct(r.Hit)} / {Pct(1 - r.Hit)}";
 					break;
 				}
 				case OddsKind.DiscardRandom:
@@ -254,6 +283,7 @@ namespace DiscardOdds
 				{
 					var hits = others.Count(h => h.InGroup);
 					r.Hit = hits > 0 ? 1 : 0;
+					r.ByChoice = hits > 0;
 					r.ExpectedHits = r.Hit;
 					r.Detail = hits > 0 ? $"you choose; {hits} target(s) in hand" : "you choose; no target in hand";
 					break;
@@ -273,15 +303,16 @@ namespace DiscardOdds
 		}
 
 		/// <summary>
-		/// Odds for every odds card currently in hand (one line per distinct card id): card-specific rules first,
+		/// Odds for every odds card currently in hand (one line per distinct card id, never two for one entity): card-specific rules first,
 		/// then generic "draw N" rules from the card text (via s.CardText).
 		/// </summary>
 		public static List<CardOdds> ForHand(OddsState s, IDictionary<string, OddsRule> rules)
 		{
 			var result = new List<CardOdds>();
+			var seen = new HashSet<int>();
 			foreach(var h in s.Hand.GroupBy(x => x.CardId).Select(g => g.First()))
 			{
-				if(h.CardId == null) continue;
+				if(h.CardId == null || !seen.Add(h.EntityId)) continue;
 				OddsRule rule;
 				if(!rules.TryGetValue(h.CardId, out rule))
 				{

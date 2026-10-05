@@ -73,8 +73,13 @@ internal static class Program
 		Check("Wicked Whispers: lowest is Walking Dead -> 100%", OddsEngine.Compute(rules["DMF_119"], s, 1).Hit, 1);
 		s.Hand.Add(H(7, "X0", 3, false));
 		Check("Wicked Whispers: tie WD/X0 at 3 -> 50%", OddsEngine.Compute(rules["DMF_119"], s, 1).Hit, 0.5);
+		var wwTie = OddsEngine.Compute(rules["DMF_119"], s, 1);
+		CheckTrue("tie: lowest rule lists every tied card (WD bold target + X0)", wwTie.DiscardRule == "lowest" && wwTie.DiscardNames.Count == 2
+			&& wwTie.DiscardNames.Any(x => x.name == "RLK_532" && x.target) && wwTie.DiscardNames.Any(x => x.name == "X0" && !x.target));
 		s.Hand.Add(H(8, "ULD_163", 2, false)); // Expired Merchant in hand
 		Check("Expired Merchant: highest is Gul'dan -> 100%", OddsEngine.Compute(rules["ULD_163"], s, 8).Hit, 1);
+		var em = OddsEngine.Compute(rules["ULD_163"], s, 8);
+		CheckTrue("highest rule names the single top card", em.DiscardRule == "highest" && em.DiscardNames.Count == 1 && em.DiscardNames[0].name == "BT_300");
 		s.Hand.Add(H(9, "EX1_308", 1, false)); // Soulfire
 		// others for Soulfire: WW, WD, HoG, Duke, X0, Merchant = 6 cards, 2 payoffs
 		Check("Soulfire random: 2/6", OddsEngine.Compute(rules["EX1_308"], s, 9).Hit, 2.0 / 6);
@@ -253,6 +258,38 @@ internal static class Program
 		CheckTrue("immune hero never lethal", !LethalEngine.Compute(new LethalInput { OppHealth = 1, OppImmune = true, Minions = { new LethalAttacker { Attack = 5, Attacks = 1 } } }).Lethal);
 		var lap = LethalEngine.Compute(new LethalInput { Mana = 4, OppHealth = 5, Hand = { barrage } });
 		CheckTrue("≈ lethal is marked LETHAL? with ≈", lap.Lethal && lap.Approx && lap.Line.StartsWith("Face damage: ≈5") && lap.Line.Contains("LETHAL?"));
+
+		// ---- attack eligibility (HDT BoardDamage rules) and Ray's 15-vs-16 board
+		var ready = new AttackState { TurnsInPlay = 2 };
+		CheckTrue("minion in play since last turn: 1 attack", LethalEngine.AttacksLeft(ready) == 1);
+		CheckTrue("windfury 2, mega-windfury 4, minus attacks made", LethalEngine.AttacksLeft(new AttackState { TurnsInPlay = 1, Windfury = true, AttacksThisTurn = 1 }) == 1 && LethalEngine.AttacksLeft(new AttackState { TurnsInPlay = 1, MegaWindfury = true }) == 4);
+		var token = new AttackState { TurnsInPlay = 0, Exhausted = false }; // summoned this turn, EXHAUSTED not (yet) sent
+		CheckTrue("summoned this turn without EXHAUSTED tag: 0 attacks (played this turn)", LethalEngine.AttacksLeft(token) == 0 && LethalEngine.NoAttackReason(token) == "played this turn");
+		CheckTrue("Charge this turn: 1; Rush this turn: 0 (can't hit face)", LethalEngine.AttacksLeft(new AttackState { TurnsInPlay = 0, Charge = true }) == 1 && LethalEngine.NoAttackReason(new AttackState { TurnsInPlay = 0, Rush = true }) == "Rush, played this turn");
+		CheckTrue("frozen / dormant / can't attack / Titan: 0", new[] { new AttackState { TurnsInPlay = 3, Frozen = true }, new AttackState { TurnsInPlay = 3, Dormant = true }, new AttackState { TurnsInPlay = 3, CantAttack = true }, new AttackState { TurnsInPlay = 3, TitanLocked = true } }.All(x => LethalEngine.AttacksLeft(x) == 0));
+		CheckTrue("hero: not exhausted -> 1 (TurnsInPlay ignored); exhausted -> 0", LethalEngine.AttacksLeft(new AttackState { IsHero = true, TurnsInPlay = 0 }) == 1 && LethalEngine.AttacksLeft(new AttackState { IsHero = true, Exhausted = true, AttacksThisTurn = 1 }) == 0);
+		var ray = new LethalInput { Mana = 4, OppHealth = 15, HeroAttacksLeft = 1, Hand = { P("Chronoclaws", "WEAPON", 4, "After your hero attacks, discard your highest Cost card.", atk: 4) } };
+		foreach(var (nm, atk, hp, ast) in new[] { ("A", 3, 3, new AttackState { TurnsInPlay = 2 }), ("B", 8, 5, new AttackState { TurnsInPlay = 1 }), ("Felbeast", 1, 1, token) })
+		{
+			var left = LethalEngine.AttacksLeft(ast);
+			if(left > 0) ray.Minions.Add(new LethalAttacker { Name = nm, Attack = atk, Attacks = left });
+			else ray.NotCounted.Add($"{nm} {atk}/{hp} ({LethalEngine.NoAttackReason(ast)})");
+		}
+		var rr = LethalEngine.Compute(ray);
+		CheckTrue("Ray's board 3/3 + 8/5 + Chronoclaws = 15 (token summoned this turn not counted, listed in details)", rr.Total == 15 && rr.Board == 11 && rr.Lethal && rr.Detail.Contains("not counted: Felbeast 1/1 (played this turn)"));
+
+		// ---- one-drop odds (Ray's Discardo: 10 one-drops in 30)
+		Check("PNone 0 one-drops in 3 of 30 (10 ones)", OneDropOdds.PNone(30, 10, 3), C(20, 3) / C(30, 3));
+		Check("PNone impossible -> 0", OneDropOdds.PNone(5, 4, 2), 0);
+		Check("going first, keep 3 non-ones: T1 hit 10/27", 1 - OneDropOdds.PNoneByTurn1(27, 10, 0), 10.0 / 27);
+		Check("going first, full mulligan of 3: T1 hit", 1 - OneDropOdds.PNoneByTurn1(27, 10, 3), 1 - C(17, 3) / C(27, 3) * 17.0 / 27);
+		Check("on coin, full mulligan of 4: T1 hit", 1 - OneDropOdds.PNoneByTurn1(26, 10, 4), 1 - C(16, 4) / C(26, 4) * 16.0 / 26);
+		Check("going first full mull hit = 85.36%", 1 - OneDropOdds.PNoneByTurn1(27, 10, 3), 0.8536, 1e-4);
+		Check("on coin full mull hit = 92.51%", 1 - OneDropOdds.PNoneByTurn1(26, 10, 4), 0.9251, 1e-4);
+
+		// ---- settings: new toggles round-trip
+		var st2 = PluginSettings.Parse(new[] { "ShowDetails=True", "ShowOneDrop=False" });
+		CheckTrue("ShowDetails / ShowOneDrop parse (defaults off / on)", st2.ShowDetails && !st2.ShowOneDrop && !PluginSettings.Parse(new string[0]).ShowDetails && PluginSettings.Parse(new string[0]).ShowOneDrop);
 
 		// ---- log files: not held open between flushes, nothing lost while a reader locks the file
 		var marker = "selftest-" + Guid.NewGuid().ToString("N");

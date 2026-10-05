@@ -287,6 +287,37 @@ internal static class Program
 		Check("going first full mull hit = 85.36%", 1 - OneDropOdds.PNoneByTurn1(27, 10, 3), 0.8536, 1e-4);
 		Check("on coin full mull hit = 92.51%", 1 - OneDropOdds.PNoneByTurn1(26, 10, 4), 0.9251, 1e-4);
 
+		// ---- v0.1.2: one line per entity, Hand of Gul'dan as "(discard)", choose-discards hidden, Chronoclaws names only
+		var vs = new OddsState { Deck = deck, DeckCount = 24, Group = payoffs, CardText = id => id == "BT_300" ? "When you play or discard this, draw 3 cards." : null };
+		vs.Hand = new List<OddsHandCard> { H(31, "BT_300", 6, true), H(32, "DMF_119", 1, false), H(33, "X1", 2, false) };
+		var vo = OddsEngine.ForHand(vs, rules);
+		var hogLines = vo.Where(o => o.CardId == "BT_300").ToList();
+		CheckTrue("Hand of Gul'dan: exactly one line, labelled (discard), played odds only in detail",
+			hogLines.Count == 1 && hogLines[0].Name == "Hand of Gul'dan (discard)" && hogLines[0].EntityId == 31
+			&& hogLines[0].Detail.StartsWith("if discarded:") && hogLines[0].Detail.Contains("if played:"));
+		Check("Hand of Gul'dan (discard) odds = draw 3", hogLines[0].Hit, 1 - C(16, 3) / C(24, 3));
+		vs.Hand.Add(H(34, "BT_300", 6, true));
+		vs.Hand.Add(H(31, "BT_300", 6, true)); // same entity reported twice
+		vo = OddsEngine.ForHand(vs, rules);
+		CheckTrue("no duplicate lines: two copies / a repeated entity -> one line per card, entities unique",
+			vo.Count(o => o.CardId == "BT_300") == 1 && vo.Select(o => o.EntityId).Distinct().Count() == vo.Count && vo.Select(o => o.CardId).Distinct().Count() == vo.Count);
+		var genDiscard = OddsRule.ForCard("ZZ_1", "Some Draw", "When you play or discard this, draw 2 cards.");
+		CheckTrue("generic 'play or discard this, draw N' -> OnDiscard, not ≈", genDiscard.OnDiscard && !genDiscard.Approx && genDiscard.Clause == null);
+		var ocu = new OddsRule { CardId = "CATA_490", Name = "Ocular", Kind = OddsKind.DiscardChoose };
+		CheckTrue("Ocular with a target in hand: 100% by choice -> hidden (details only)", OddsEngine.Compute(ocu, vs).ByChoice);
+		var noTarget = new OddsState { Deck = deck, DeckCount = 24, Group = payoffs, Hand = new List<OddsHandCard> { H(41, "CATA_490", 3, false), H(42, "X1", 2, false) } };
+		CheckTrue("Ocular with no target in hand: 0%, shown", !OddsEngine.Compute(ocu, noTarget, 41).ByChoice && OddsEngine.Compute(ocu, noTarget, 41).Hit == 0);
+		var cs = new OddsState { Deck = deck, DeckCount = 24, Group = payoffs, Hand = new List<OddsHandCard> { H(51, "END_016", 4, false), H(52, "RLK_534", 4, true), H(53, "X2", 4, false), H(54, "X3", 1, false) } };
+		var cl = OddsEngine.Compute(rules["END_016"], cs, 51);
+		CheckTrue("Chronoclaws: no % even on a mixed tie, names both tied cards (orange), % kept in detail",
+			cl.NoOdds && cl.DiscardRule == "highest" && cl.DiscardNames.Count == 2 && cl.Detail.Contains("target 50% / 50%"));
+		var emMixed = OddsEngine.Compute(rules["ULD_163"], cs, 51);
+		CheckTrue("Expired Merchant on a mixed tie keeps %", !emMixed.NoOdds && Math.Abs(emMixed.Hit - 0.5) < 1e-9);
+		cs.Hand.RemoveAll(h => h.EntityId == 53);
+		var emSure = OddsEngine.Compute(rules["ULD_163"], cs, 51);
+		CheckTrue("Expired Merchant when certain -> no %, just the target", emSure.NoOdds && emSure.Hit == 1 && emSure.DiscardNames.Count == 1);
+		CheckTrue("Wicked Whispers keeps % (lowest rule unchanged)", !OddsEngine.Compute(rules["DMF_119"], cs).NoOdds);
+
 		// ---- settings: new toggles round-trip
 		var st2 = PluginSettings.Parse(new[] { "ShowDetails=True", "ShowOneDrop=False" });
 		CheckTrue("ShowDetails / ShowOneDrop parse (defaults off / on)", st2.ShowDetails && !st2.ShowOneDrop && !PluginSettings.Parse(new string[0]).ShowDetails && PluginSettings.Parse(new string[0]).ShowOneDrop);

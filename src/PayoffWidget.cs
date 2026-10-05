@@ -25,6 +25,7 @@ namespace DiscardOdds
 		public bool Bold;
 		public bool Small;
 		public bool DetailOnly;        // only shown with "Show details"
+		public bool NoOdds;            // no hit/miss %, only "→ card(s) it would discard" (Chronoclaws, certain Expired Merchant)
 		public string Suffix;          // small dim text after the numbers on the same line (e.g. the targets list)
 	}
 
@@ -141,15 +142,20 @@ namespace DiscardOdds
 			else
 			{
 				var hit = Math.Max(0, Math.Min(1, r.Hit ?? 0));
-				tb.Inlines.Add(new Run((r.Name ?? "?") + "  ") { Foreground = r.NameIsLabel ? WidgetColors.Text : WidgetColors.CardName, FontWeight = FontWeights.SemiBold });
-				tb.Inlines.Add(new Run(OddsEngine.Pct(hit)) { Foreground = WidgetColors.Hit, FontWeight = FontWeights.Bold, FontSize = size + 1.5 });
-				tb.Inlines.Add(new Run(" / ") { Foreground = WidgetColors.Dim });
-				tb.Inlines.Add(new Run(OddsEngine.Pct(1 - hit)) { Foreground = WidgetColors.Miss, FontWeight = FontWeights.SemiBold });
-				if(r.Approx) tb.Inlines.Add(new Run(" ≈") { Foreground = WidgetColors.Dim });
+				tb.Inlines.Add(new Run((r.Name ?? "?") + (r.NoOdds ? "" : "  ")) { Foreground = r.NameIsLabel ? WidgetColors.Text : WidgetColors.CardName, FontWeight = FontWeights.SemiBold });
+				if(!r.NoOdds)
+				{
+					tb.Inlines.Add(new Run(OddsEngine.Pct(hit)) { Foreground = WidgetColors.Hit, FontWeight = FontWeights.Bold, FontSize = size + 1.5 });
+					tb.Inlines.Add(new Run(" / ") { Foreground = WidgetColors.Dim });
+					tb.Inlines.Add(new Run(OddsEngine.Pct(1 - hit)) { Foreground = WidgetColors.Miss, FontWeight = FontWeights.SemiBold });
+					if(r.Approx) tb.Inlines.Add(new Run(" ≈") { Foreground = WidgetColors.Dim });
+				}
+				if(r.NoOdds && (r.DiscardNames == null || r.DiscardNames.Count == 0))
+					tb.Inlines.Add(new Run(" → nothing to discard") { Foreground = WidgetColors.Dim });
 				if(r.DiscardNames != null && r.DiscardNames.Count > 0 && r.DiscardRule != null)
 				{
 					var color = r.DiscardRule == "lowest" ? WidgetColors.Lowest : WidgetColors.Highest;
-					tb.Inlines.Add(new Run("  → ") { Foreground = WidgetColors.Dim });
+					tb.Inlines.Add(new Run(r.NoOdds ? " → " : "  → ") { Foreground = WidgetColors.Dim });
 					for(var i = 0; i < r.DiscardNames.Count; i++)
 					{
 						if(i > 0) tb.Inlines.Add(new Run(" / ") { Foreground = WidgetColors.Dim });

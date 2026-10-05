@@ -7,7 +7,10 @@ An HDT plugin that shows live odds for the cards **you** care about in **any dec
 3. **"If you play it" hit/miss** for every draw or discard card in your hand:
    - **Any card whose text draws cards** ("Draw a card", "Draw 2 cards", from HearthstoneJSON text via HearthDb) gets one line `Card name  hit% / miss%` for drawing at least one target. Conditional draws (Deathrattle, "If …", Combo, Choose One, "for each" …) are marked `≈`.
    - **Card-specific models** cover discard and special-draw cards: Wicked Whispers (lowest Cost), Expired Merchant and Chronoclaws (highest Cost), Soulfire and Darkshire Librarian (random), Ocular Occultist and Gemstone Hoarder (choose), Chamber of Viscidus (look at 3), Platysaur (draw, then discard it on death), The Soularium, Hand of Gul'dan, Cursed Catacombs (Discover from deck), Sketch Artist (Shadow spell). For example: `Wicked Whispers  50% / 50%  → Walking Dead / Party Fiend` (every tied card is listed; targets in bold).
-   - What a Platysaur on your board is holding (from the game's own link enchantment), Duke of Below's current size (2/2 + 2/2 per card discarded this game), and, when something in hand could discard Hand of Gul'dan, the chance its 3 draws find a target.
+   - **One line per card in hand, never two.** Hand of Gul'dan shows a single line, `Hand of Gul'dan (discard)  hit% / miss%`: the chance its 3 draws find a target when it is discarded (the played odds are the same 3 draws and appear only under *Show details*). Any other "When you play or discard this, draw N" card gets the same treatment.
+   - **Chronoclaws** shows no percentages, only the card(s) it would discard right now: `Chronoclaws → Soul Barrage` (orange). **Expired Merchant** does the same whenever the result is certain; on a tie between a target and a non-target it shows hit/miss.
+   - Cards where **you choose** the discard (Ocular Occultist, Gemstone Hoarder) are hidden while a target is in hand, since that is 100% by your choice; they appear only under *Show details*.
+   - What a Platysaur on your board is holding (from the game's own link enchantment) and Duke of Below's current size (2/2 + 2/2 per card discarded this game).
 4. **Lethal check** on your turn: `Face damage: X vs Y health`, bold green when it's lethal, red when short (see [Lethal check](#lethal-check-your-turn)).
 5. **Opening one-drop odds** during the mulligan and your turn 1 only (see [One-drop odds](#one-drop-odds-mulligan--turn-1)).
 
@@ -24,7 +27,7 @@ One line per card, kept short so it doesn't cover your mana, hand or the opponen
 | blue | the card a *lowest Cost* discard (Wicked Whispers) would hit |
 | dim grey | details |
 
-The reasons behind each number (e.g. `lowest cost 3: …`, `8 targets in 24 cards, draw 3`) and a small color legend are hidden by default; turn them on with *Plugins → Discard Odds → Show details*. Update status is never shown on the overlay, only as the first item of the plugin menu (e.g. `Up to date (v0.1.1)` or `Update v0.1.2 ready: restart HDT to finish`).
+The reasons behind each number (e.g. `lowest cost 3: …`, `8 targets in 24 cards, draw 3`) and a small color legend are hidden by default; turn them on with *Plugins → Discard Odds → Show details*. Update status is never shown on the overlay, only as the first item of the plugin menu (e.g. `Up to date (v0.1.2)` or `Update v0.1.2 ready: restart HDT to finish`).
 
 M (cards left) is HDT's deck count. "Casts When Drawn" cards such as Shreds of Time are left out, because drawing one replaces itself, and they are shown as a separate note.
 
@@ -173,7 +176,7 @@ For a 30-card list with 10 one-drops and no 1-drop in the opening hand: going fi
 
 When HDT starts, the plugin asks GitHub once for this repository's latest release (`https://api.github.com/repos/raydosborne/hdt-discard-odds/releases/latest`, HTTPS, no other site, no data about you or your games sent). It then compares that release's tag (e.g. `v0.2.0`) with the running version:
 
-- **Up to date:** the first Plugins-menu item reads `Up to date (v0.1.1)`. **Offline:** nothing changes; network errors are only written to the plugin log.
+- **Up to date:** the first Plugins-menu item reads `Up to date (v0.1.2)`. **Offline:** nothing changes; network errors are only written to the plugin log.
 - **Newer, Auto-update on (default):** it downloads the release's `DiscardOdds.dll` and `DiscardOdds.dll.sha256` and checks three things: the SHA-256 matches, the DLL really is `DiscardOdds` with the tag's version, and the download URLs belong to this repository's release assets. If all three pass, it replaces the copy in `%AppData%\HearthstoneDeckTracker\Plugins\…` and the first Plugins-menu item reads **"Update vX.Y.Z ready: restart HDT to finish"** (nothing is shown on the overlay). HDT locks the DLL it is running from (its local `Plugins` folder, not the AppData one), and on the next start it copies the newer AppData file over automatically. The previous DLL is kept as `DiscardOdds\update\DiscardOdds.previous.dll`. If any check fails, nothing is replaced and the notice says so.
 - **Newer, Auto-update off:** the first menu item reads "Update vX.Y.Z available (auto-update off): open release page"; click it to open the release page.
 

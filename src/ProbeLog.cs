@@ -235,6 +235,7 @@ namespace DiscardOdds
 		public bool ShowLethalCheck = true;        // "Face damage: X vs Y health" line on your turn
 		public bool ShowDetails = false;           // dim second line with the reason behind each number, plus the color legend
 		public bool ShowOneDrop = true;            // opening one-drop odds (mulligan + your turn 1 only)
+		public bool CompactMode = true;            // smaller font, tighter padding, short header (default ON)
 
 		private static string PathOnDisk => Path.Combine(ProbeLog.RootDir, "settings.ini");
 
@@ -281,6 +282,7 @@ namespace DiscardOdds
 						case nameof(ShowLethalCheck): s.ShowLethalCheck = ParseB(v, s.ShowLethalCheck); break;
 						case nameof(ShowDetails): s.ShowDetails = ParseB(v, s.ShowDetails); break;
 						case nameof(ShowOneDrop): s.ShowOneDrop = ParseB(v, s.ShowOneDrop); break;
+						case nameof(CompactMode): s.CompactMode = ParseB(v, s.CompactMode); break;
 					}
 				}
 				// A user-saved position takes precedence over the default. Legacy files (no WidgetPositionSaved key)
@@ -318,6 +320,7 @@ namespace DiscardOdds
 					$"{nameof(ShowLethalCheck)}={ShowLethalCheck}",
 					$"{nameof(ShowDetails)}={ShowDetails}",
 					$"{nameof(ShowOneDrop)}={ShowOneDrop}",
+					$"{nameof(CompactMode)}={CompactMode}",
 					"# Updates: CheckForUpdates asks github.com/" + UpdateLogic.Owner + "/" + UpdateLogic.Repo + " for the latest release on HDT start.",
 					"# AutoUpdate also downloads it (SHA-256 verified); it is swapped in when HDT restarts. Set either to False to opt out.",
 					$"{nameof(CheckForUpdates)}={CheckForUpdates}",

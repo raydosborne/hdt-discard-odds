@@ -275,20 +275,27 @@ namespace DiscardOdds
 					Detail = $"{n} target cards among the {m} cards left" + (unknown > 0 ? $"; {unknown} unknown card(s) counted as misses" : "")
 				};
 				c.Rows.AddRange(oneDrop);
-				// One line per odds card in hand: "if you play it" hit / miss.
-				var state = GameReader.BuildOddsState(_probes.LastHand, Targets.Current);
-				foreach(var o in OddsEngine.ForHand(state, OddsRule.CardRules))
-					c.Rows.Add(new WidgetRow { Name = o.Name, Hit = o.Hit, Approx = o.Approx, Detail = o.Detail, DiscardRule = o.DiscardRule, DiscardNames = o.DiscardNames });
+				// One line per odds card in hand (one per entity, never two): "if you play it" hit / miss.
+				// Hand of Gul'dan gets a single "(discard)" line; its played odds are in the detail only.
+				// A hit that is 100% only because you choose the discard (Ocular Occultist) is shown only with Show details.
+				// Chronoclaws (and Expired Merchant when certain) show only "→ the card(s) it would discard", no %.
 				var lastHand = _probes.LastHand;
-				// Hand of Gul'dan: draws 3 when discarded. Shown when something could discard it this turn.
-				var hog = lastHand.FirstOrDefault(h => h.CardId == "BT_300");
+				var state = GameReader.BuildOddsState(lastHand, Targets.Current);
 				var outletInHand = lastHand.Any(h => h.CardId != null && CardIds.OutletRule.ContainsKey(h.CardId) && h.CardId != CardIds.Platysaur);
-				if(hog != null && (outletInHand || hog.HasTempEnchant))
-					c.Rows.Add(new WidgetRow
+				var rowEntities = new HashSet<int>();
+				var rowCards = new HashSet<string>();
+				foreach(var o in OddsEngine.ForHand(state, OddsRule.CardRules))
+				{
+					if(!rowEntities.Add(o.EntityId) || !rowCards.Add(o.CardId)) continue;
+					var detail = o.Detail;
+					if(o.CardId == "BT_300")
 					{
-						Name = "Hand of Gul'dan", Suffix = "if discarded (draws 3)", Hit = OddsEngine.PAtLeastOne(n, m, 3),
-						Detail = "draws 3: at least one target" + (hog.HasTempEnchant ? " · Temporary: burns at end of turn" : "")
-					});
+						var hog = lastHand.FirstOrDefault(h => h.EntityId == o.EntityId);
+						detail += outletInHand ? " · a discard card is in hand" : " · no discard card in hand";
+						if(hog != null && hog.HasTempEnchant) detail += " · Temporary: burns at end of turn";
+					}
+					c.Rows.Add(new WidgetRow { Name = o.Name, Hit = o.Hit, Approx = o.Approx, Detail = detail, DiscardRule = o.DiscardRule, DiscardNames = o.DiscardNames, DetailOnly = o.ByChoice, NoOdds = o.NoOdds });
+				}
 				// Duke of Below: 2/2 + 2/2 per card discarded this game (EntitiesDiscardedFromHand, 4/4 in the live test).
 				var discards = GameReader.Player?.EntitiesDiscardedFromHand.Count ?? 0;
 				if(lastHand.Any(h => h.CardId == CardIds.Duke))

@@ -370,16 +370,38 @@ namespace DiscardOdds
 			catch { return false; }
 		}
 
-		/// <summary>Attacks this character can still make this turn (0 if exhausted, frozen, can't attack, or a fresh Rush).</summary>
-		private static int AttacksLeft(Entity e)
+		// Tags looked up by name, so this compiles against older HearthDb builds that lack them (0 if unknown).
+		private static readonly Dictionary<string, GameTag?> NamedTags = new Dictionary<string, GameTag?>();
+		private static int Tag(Entity e, string name)
 		{
-			if(e.GetTag(GameTag.FROZEN) > 0 || e.GetTag(GameTag.CANT_ATTACK) > 0 || e.GetTag(GameTag.DORMANT) > 0 || e.GetTag(GameTag.EXHAUSTED) > 0)
-				return 0;
-			// Rush without Charge on its first turn can only hit minions.
-			if(e.IsMinion && e.GetTag(GameTag.RUSH) > 0 && e.GetTag(GameTag.CHARGE) == 0 && e.GetTag(GameTag.NUM_TURNS_IN_PLAY) == 0)
-				return 0;
-			var per = e.GetTag(GameTag.WINDFURY) > 1 ? e.GetTag(GameTag.WINDFURY) : e.GetTag(GameTag.WINDFURY) > 0 ? 2 : 1;
-			return Math.Max(0, per - e.GetTag(GameTag.NUM_ATTACKS_THIS_TURN));
+			GameTag? t;
+			lock(NamedTags)
+			{
+				if(!NamedTags.TryGetValue(name, out t))
+					NamedTags[name] = t = Enum.TryParse<GameTag>(name, out var g) ? g : (GameTag?)null;
+			}
+			return t.HasValue ? e.GetTag(t.Value) : 0;
+		}
+
+		/// <summary>Attack-relevant tags of a friendly character (rules in LethalEngine.AttacksLeft, unit-tested).</summary>
+		public static AttackState AttackStateOf(Entity e)
+		{
+			var titanUsed = Tag(e, "TITAN_ABILITY_USED_1") + Tag(e, "TITAN_ABILITY_USED_2") + Tag(e, "TITAN_ABILITY_USED_3");
+			return new AttackState
+			{
+				IsHero = e.IsHero,
+				Exhausted = e.GetTag(GameTag.EXHAUSTED) == 1,
+				TurnsInPlay = e.GetTag(GameTag.NUM_TURNS_IN_PLAY),
+				Charge = e.GetTag(GameTag.CHARGE) == 1,
+				Rush = e.GetTag(GameTag.RUSH) == 1,
+				Frozen = e.GetTag(GameTag.FROZEN) == 1,
+				CantAttack = e.GetTag(GameTag.CANT_ATTACK) == 1,
+				Dormant = e.GetTag(GameTag.DORMANT) == 1,
+				Windfury = e.GetTag(GameTag.WINDFURY) > 0,
+				MegaWindfury = Tag(e, "MEGA_WINDFURY") == 1 || e.GetTag(GameTag.WINDFURY) == 3,
+				TitanLocked = Tag(e, "TITAN") == 1 && titanUsed < 3,
+				AttacksThisTurn = e.GetTag(GameTag.NUM_ATTACKS_THIS_TURN)
+			};
 		}
 
 		/// <summary>Live board/hand/mana for the lethal check, or null when it isn't the player's turn.</summary>
@@ -395,15 +417,18 @@ namespace DiscardOdds
 			var x = new LethalInput();
 			foreach(var e in mine.Where(e => e.IsMinion && e.Attack > 0))
 			{
-				var left = AttacksLeft(e);
-				if(left > 0) x.Minions.Add(new LethalAttacker { Name = SafeName(e) ?? e.CardId, Attack = e.Attack, Attacks = left });
+				var st = AttackStateOf(e);
+				var left = LethalEngine.AttacksLeft(st);
+				var name = SafeName(e) ?? e.CardId;
+				if(left > 0) x.Minions.Add(new LethalAttacker { Name = name, Attack = e.Attack, Attacks = left });
+				else x.NotCounted.Add($"{name} {e.Attack}/{e.Health} ({LethalEngine.NoAttackReason(st) ?? "no attacks left"})");
 			}
 			var hero = mine.FirstOrDefault(e => e.IsHero);
 			if(hero != null)
 			{
 				x.HeroAttack = hero.Attack;
 				var weapon = mine.FirstOrDefault(e => e.IsWeapon);
-				x.HeroAttacksLeft = AttacksLeft(hero);
+				x.HeroAttacksLeft = LethalEngine.AttacksLeft(AttackStateOf(hero));
 				if(weapon != null && weapon.GetTag(GameTag.WINDFURY) > 0 && hero.GetTag(GameTag.WINDFURY) == 0)
 					x.HeroAttacksLeft = Math.Max(0, 2 - hero.GetTag(GameTag.NUM_ATTACKS_THIS_TURN));
 			}

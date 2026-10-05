@@ -3,13 +3,13 @@
 An HDT plugin that shows live odds for the cards **you** care about in **any deck**. It shows **numbers only, never advice**, and uses no HSReplay data: everything is computed from HDT's live view of your deck and hand.
 
 1. **Target cards, per deck.** Pick your deck's target cards (payoffs, combo pieces, win conditions) in *Plugins → Discard Odds → Choose target cards for this deck…*: a window lists the active deck's cards with checkboxes. Each deck keeps its own list in `targets.json` (see [Target cards](#target-cards-targetsjson)).
-2. **Next draw.** The first line of the overlay box: `Next draw (N/M)  33% / 67%`, followed on the same line by the targets in the active deck list with copies left, e.g. `Soul Barrage 1/2 · Walking Dead 2/2`.
+2. **Next draw.** Compact header (default): `Next 33% · 8/25`. With Compact mode off: `Next draw (N/M)  33% / 67%` plus the targets with copies left. Toggle *Plugins → Discard Odds → Compact mode*.
 3. **"If you play it" hit/miss** for every draw or discard card in your hand:
    - **Any card whose text draws cards** ("Draw a card", "Draw 2 cards", from HearthstoneJSON text via HearthDb) gets one line `Card name  hit% / miss%` for drawing at least one target. Conditional draws (Deathrattle, "If …", Combo, Choose One, "for each" …) are marked `≈`.
    - **Card-specific models** cover discard and special-draw cards: Wicked Whispers (lowest Cost), Expired Merchant and Chronoclaws (highest Cost), Soulfire and Darkshire Librarian (random), Ocular Occultist and Gemstone Hoarder (choose), Chamber of Viscidus (look at 3), Platysaur (draw, then discard it on death), The Soularium, Hand of Gul'dan, Cursed Catacombs (Discover from deck), Sketch Artist (Shadow spell). For example: `Wicked Whispers  50% / 50%  → Walking Dead / Party Fiend` (every tied card is listed; targets in bold).
    - **One line per card in hand, never two.** Hand of Gul'dan shows a single line, `Hand of Gul'dan (discard)  hit% / miss%`: the chance its 3 draws find a target when it is discarded (the played odds are the same 3 draws and appear only under *Show details*). Any other "When you play or discard this, draw N" card gets the same treatment.
    - **Chronoclaws** shows no percentages, only the card(s) it would discard right now: `Chronoclaws → Soul Barrage` (orange). **Expired Merchant** does the same whenever the result is certain; on a tie between a target and a non-target it shows hit/miss.
-   - Cards where **you choose** the discard (Ocular Occultist, Gemstone Hoarder) are hidden while a target is in hand, since that is 100% by your choice; they appear only under *Show details*.
+   - Cards where **you choose** the discard (Ocular Occultist, Gemstone Hoarder) never appear on the main widget (you can already see whether a target is in hand); they appear only under *Show details*.
    - What a Platysaur on your board is holding (from the game's own link enchantment) and Duke of Below's current size (2/2 + 2/2 per card discarded this game).
 4. **Lethal check** on your turn: `Face damage: X vs Y health`, bold green when it's lethal, red when short (see [Lethal check](#lethal-check-your-turn)).
 5. **Opening one-drop odds** during the mulligan and your turn 1 only (see [One-drop odds](#one-drop-odds-mulligan--turn-1)).
@@ -27,7 +27,7 @@ One line per card, kept short so it doesn't cover your mana, hand or the opponen
 | blue | the card a *lowest Cost* discard (Wicked Whispers) would hit |
 | dim grey | details |
 
-The reasons behind each number (e.g. `lowest cost 3: …`, `8 targets in 24 cards, draw 3`) and a small color legend are hidden by default; turn them on with *Plugins → Discard Odds → Show details*. Update status is never shown on the overlay, only as the first item of the plugin menu (e.g. `Up to date (v0.1.2)` or `Update v0.1.2 ready: restart HDT to finish`).
+The reasons behind each number (e.g. `lowest cost 3: …`, `8 targets in 24 cards, draw 3`) and a small color legend are hidden by default; turn them on with *Plugins → Discard Odds → Show details*. Update status is never shown on the overlay, only as the first item of the plugin menu (e.g. `Up to date (v0.1.3)` or `Update v0.1.2 ready: restart HDT to finish`).
 
 M (cards left) is HDT's deck count. "Casts When Drawn" cards such as Shreds of Time are left out, because drawing one replaces itself, and they are shown as a separate note.
 
@@ -118,7 +118,7 @@ HDT loads plugins from **`%AppData%\HearthstoneDeckTracker\Plugins`**. Don't use
    ```
    (Shortcut: `dotnet build -c Release -p:HdtDir="$hdt" -p:DeployToHdt=true` builds and copies in one step.)
 3. Start HDT, go to **Options → Tracker → Plugins**, select **"Discard Odds (M0 probe)"** and tick **Enabled**.
-4. HDT's main window now has a **Plugins → Discard Odds** menu with: *Choose target cards for this deck…*, *Reload targets.json*, *Unlock widget (drag to move)*, *Show widget*, *Show details (reasons + color legend)*, *Show lethal check (your turn)*, *Show one-drop odds (mulligan + turn 1)*, *Reset widget position*, *Write deck snapshot to log now*, *Open log folder*, and the update status (first item) and options (*Check for updates when HDT starts*, *Auto-update*, *Check for updates now*, *Open releases page*). The plugin's button in Options → Tracker → Plugins also opens the log folder.
+4. HDT's main window now has a **Plugins → Discard Odds** menu with: *Choose target cards for this deck…*, *Reload targets.json*, *Unlock widget (drag to move)*, *Show widget*, *Show details (reasons + color legend)*, *Compact mode (smaller widget)*, *Show lethal check (your turn)*, *Show one-drop odds (mulligan + turn 1)*, *Reset widget position*, *Write deck snapshot to log now*, *Open log folder*, and the update status (first item) and options (*Check for updates when HDT starts*, *Auto-update*, *Check for updates now*, *Open releases page*). The plugin's button in Options → Tracker → Plugins also opens the log folder.
 
 ## Target cards (targets.json)
 
@@ -176,7 +176,7 @@ For a 30-card list with 10 one-drops and no 1-drop in the opening hand: going fi
 
 When HDT starts, the plugin asks GitHub once for this repository's latest release (`https://api.github.com/repos/raydosborne/hdt-discard-odds/releases/latest`, HTTPS, no other site, no data about you or your games sent). It then compares that release's tag (e.g. `v0.2.0`) with the running version:
 
-- **Up to date:** the first Plugins-menu item reads `Up to date (v0.1.2)`. **Offline:** nothing changes; network errors are only written to the plugin log.
+- **Up to date:** the first Plugins-menu item reads `Up to date (v0.1.3)`. **Offline:** nothing changes; network errors are only written to the plugin log.
 - **Newer, Auto-update on (default):** it downloads the release's `DiscardOdds.dll` and `DiscardOdds.dll.sha256` and checks three things: the SHA-256 matches, the DLL really is `DiscardOdds` with the tag's version, and the download URLs belong to this repository's release assets. If all three pass, it replaces the copy in `%AppData%\HearthstoneDeckTracker\Plugins\…` and the first Plugins-menu item reads **"Update vX.Y.Z ready: restart HDT to finish"** (nothing is shown on the overlay). HDT locks the DLL it is running from (its local `Plugins` folder, not the AppData one), and on the next start it copies the newer AppData file over automatically. The previous DLL is kept as `DiscardOdds\update\DiscardOdds.previous.dll`. If any check fails, nothing is replaced and the notice says so.
 - **Newer, Auto-update off:** the first menu item reads "Update vX.Y.Z available (auto-update off): open release page"; click it to open the release page.
 
@@ -188,7 +188,7 @@ The checksum guards against corrupted or truncated downloads. It is published in
 
 ```
 %AppData%\HearthstoneDeckTracker\DiscardOdds\
-    settings.ini                 widget position / toggles (WidgetPositionSaved=True once you move it), ShowLethalCheck, ShowDetails, ShowOneDrop, CheckForUpdates / AutoUpdate
+    settings.ini                 widget position / toggles (WidgetPositionSaved=True once you move it), ShowLethalCheck, ShowDetails, ShowOneDrop, CompactMode, CheckForUpdates / AutoUpdate
     update\                      last downloaded update (DiscardOdds.dll) and the DLL it replaced (DiscardOdds.previous.dll)
     targets.json                 your per-deck target cards and presets (targets.json.bak = previous version)
     logs\m0_YYYY-MM-DD.log       readable probe log (one per day, games separated by ===== lines)

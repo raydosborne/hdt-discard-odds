@@ -82,18 +82,18 @@ namespace DiscardOdds
 				if(!UpdateLogic.IsNewer(rel.Version, _running))
 				{
 					ProbeLog.Line("UPDATE", $"up to date (running {_running}, latest {rel.Tag})");
-					Set(manual ? $"Up to date (v{_running})" : null);
+					Set($"Up to date (v{_running})"); // shown in the Plugins menu only
 					return;
 				}
 				if(_installedTag == rel.Tag)
 				{
-					Set($"Discard Odds {rel.Tag} installed: restart HDT to finish updating");
+					Set($"Update {rel.Tag} ready: restart HDT to finish");
 					return;
 				}
 				ProbeLog.Line("UPDATE", $"newer release {rel.Tag} (running {_running}); auto-update {(autoUpdate ? "on" : "off")}");
 				if(!autoUpdate)
 				{
-					Set($"Discard Odds {rel.Tag} is available (auto-update is off)");
+					Set($"Update {rel.Tag} available (auto-update off): open release page");
 					return;
 				}
 
@@ -134,7 +134,7 @@ namespace DiscardOdds
 				File.SetLastWriteTimeUtc(target, DateTime.UtcNow); // HDT syncs files newer than its local copy
 				_installedTag = rel.Tag;
 				ProbeLog.Line("UPDATE", $"installed {rel.Tag} to {target} (previous kept at {backup}); restart HDT to finish");
-				Set($"Discard Odds {rel.Tag} installed: restart HDT to finish updating");
+				Set($"Update {rel.Tag} ready: restart HDT to finish");
 			}
 		}
 
@@ -165,7 +165,7 @@ namespace DiscardOdds
 		private void Fail(ReleaseInfo rel, string why)
 		{
 			ProbeLog.Line("UPDATE", $"{rel.Tag} NOT installed: {why}");
-			Set($"Discard Odds {rel.Tag} is available (auto-update failed verification; not installed)");
+			Set($"Update {rel.Tag} available (auto-update failed verification; not installed)");
 		}
 
 		private void Set(string notice)

@@ -24,8 +24,21 @@ namespace DiscardOdds
 		public bool IsWeapon;  // replaces the hero's current attack instead of adding to it
 	}
 
+	/// <summary>Attack-relevant tags of one friendly character (filled from HDT entity tags by GameReader).</summary>
+	public sealed class AttackState
+	{
+		public bool IsHero;
+		public bool Exhausted;       // EXHAUSTED tag
+		public int TurnsInPlay;      // NUM_TURNS_IN_PLAY (0 = played/summoned this turn)
+		public bool Charge, Rush, Frozen, CantAttack, Dormant, Windfury, MegaWindfury;
+		public bool TitanLocked;     // Titan with abilities left (can't attack yet)
+		public int AttacksThisTurn;  // NUM_ATTACKS_THIS_TURN
+	}
+
 	public sealed class LethalInput
 	{
+		/// <summary>Friendly characters with attack that can't attack this turn, with the reason (shown in the details).</summary>
+		public List<string> NotCounted = new List<string>();
 		public List<LethalAttacker> Minions = new List<LethalAttacker>();
 		public int HeroAttack;
 		public int HeroAttacksLeft;
@@ -68,6 +81,29 @@ namespace DiscardOdds
 		private static readonly Regex SkipBefore = new Regex(@"\b(Deathrattle|Secret|At the end|At the start|Whenever|After|Spellburst|Frenzy|Overkill|Inspire|Honorable Kill|Infuse|Excavate|Quest|Questline|When you draw|Dormant)\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 		// Conditional: may or may not happen when played.
 		private static readonly Regex ApproxBefore = new Regex(@"\b(If|Combo|Outcast|Corrupt|Choose One|Discover|Forge|Finale|Tradeable)\b", RegexOptions.CultureInvariant);
+
+		/// <summary>
+		/// Attacks left this turn, following HDT's own BoardDamage rules: a non-hero that is EXHAUSTED or has
+		/// NUM_TURNS_IN_PLAY == 0 was played this turn and can only attack with Charge (Rush can't hit the hero). The game
+		/// does not always send EXHAUSTED for a minion played this turn, so the EXHAUSTED tag alone is not enough.
+		/// </summary>
+		public static int AttacksLeft(AttackState s) => NoAttackReason(s) != null ? 0 : Math.Max(0, AttacksPerTurn(s) - s.AttacksThisTurn);
+
+		private static int AttacksPerTurn(AttackState s) => s.MegaWindfury ? 4 : s.Windfury ? 2 : 1;
+
+		/// <summary>Why a character can't attack the enemy hero now, or null if it can.</summary>
+		public static string NoAttackReason(AttackState s)
+		{
+			if(s.Frozen) return "frozen";
+			if(s.CantAttack) return "can't attack";
+			if(s.Dormant) return "dormant";
+			if(s.TitanLocked) return "Titan abilities left";
+			var justPlayed = s.Exhausted || (!s.IsHero && s.TurnsInPlay == 0);
+			if(justPlayed && !(s.Charge && !s.IsHero && s.AttacksThisTurn == 0))
+				return s.IsHero ? "already attacked" : s.Rush ? "Rush, played this turn" : "played this turn";
+			if(s.AttacksThisTurn >= AttacksPerTurn(s)) return "already attacked";
+			return null;
+		}
 
 		public static string Clean(string text) => Space.Replace(Tags.Replace(text ?? "", " ").Replace('\n', ' '), " ").Trim();
 
@@ -198,6 +234,7 @@ namespace DiscardOdds
 			var detail = parts.Count > 0 ? string.Join(" + ", parts) : "nothing can reach face";
 			if(r.BlockedByTaunt > 0 || x.EnemyTaunts > 0)
 				detail += $" · enemy Taunt ×{x.EnemyTaunts}: {r.BlockedByTaunt} attack damage can't go face";
+			if(x.NotCounted.Count > 0) detail += " · not counted: " + string.Join(", ", x.NotCounted);
 			if(r.Approx) detail += " · ≈ some counted damage may not hit face";
 			r.Detail = detail;
 		}

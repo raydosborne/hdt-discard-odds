@@ -153,6 +153,10 @@ namespace DiscardOdds
 		public double ExpectedHits;
 		public bool Approx;
 		public string Detail;
+		/// <summary>"highest" / "lowest" for cost-based discard cards; the widget colors DiscardNames by this rule.</summary>
+		public string DiscardRule;
+		/// <summary>The card(s) a cost-based discard would hit now (every tied card), and whether each is a target.</summary>
+		public List<(string name, bool target)> DiscardNames = new List<(string name, bool target)>();
 
 		public override string ToString() => $"{Name}: hit {OddsEngine.Pct(Hit)} / miss {OddsEngine.Pct(Miss)}{(Approx ? " ≈" : "")} ({Detail})";
 	}
@@ -232,6 +236,8 @@ namespace DiscardOdds
 					var hits = tied.Count(h => h.InGroup);
 					r.Hit = (double)hits / tied.Count; // ties assumed uniformly random (M0 logs real tie-breaks)
 					r.ExpectedHits = r.Hit;
+					r.DiscardRule = rule.Kind == OddsKind.DiscardLowest ? "lowest" : "highest";
+					r.DiscardNames = tied.Select(h => (h.Name, h.InGroup)).ToList();
 					r.Detail = (rule.Kind == OddsKind.DiscardLowest ? "lowest" : "highest") + $" cost {target}: " +
 					           string.Join(", ", tied.Select(h => h.Name + (h.InGroup ? "*" : ""))) + (tied.Count > 1 ? " (tie)" : "");
 					break;
@@ -288,5 +294,35 @@ namespace DiscardOdds
 			}
 			return result;
 		}
+	}
+
+	/// <summary>
+	/// Opening one-drop odds (pure). A "one-drop" is a 1-cost card in the active deck list.
+	/// Mulligan rule used (verified in the first live logs, 0/10 tossed cards came back): replacements are drawn from
+	/// the deck WITHOUT the tossed cards; the tossed cards are shuffled in afterwards. Both players draw 1 card at the
+	/// start of their turn 1 (going first: 3-card opening; on the Coin: 4 cards + The Coin).
+	/// </summary>
+	public static class OneDropOdds
+	{
+		/// <summary>P(no one-drop among t cards drawn without replacement from m cards that hold k one-drops).</summary>
+		public static double PNone(int m, int k, int t)
+		{
+			if(t <= 0 || k <= 0) return 1;
+			if(m <= 0) return 1;
+			k = Math.Min(k, m);
+			t = Math.Min(t, m);
+			if(t > m - k) return 0; // not enough non-one-drops to fill t draws
+			double p = 1;
+			for(var i = 0; i < t; i++)
+				p *= (double)(m - k - i) / (m - i);
+			return Math.Max(0, p);
+		}
+
+		/// <summary>
+		/// Hand has no one-drop; toss t cards (all non-one-drops). m = cards left in the deck at the mulligan, k = one-drops
+		/// among them. P(still no one-drop after the turn-1 draw): t replacements from the m cards, then the tossed cards are
+		/// shuffled back (deck = m cards, still k one-drops) and 1 card is drawn. t = 0 means "keep".
+		/// </summary>
+		public static double PNoneByTurn1(int m, int k, int t) => PNone(m, k, t) * PNone(m, k, 1);
 	}
 }

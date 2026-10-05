@@ -65,6 +65,19 @@ namespace DiscardOdds
 		private const double DrawSettleTimeoutSeconds = 0.3;
 		private const double HeroAttackWindowSeconds = 3.0;
 
+		// opening one-drop line: the hand right after the mulligan, and whether the player's turn 1 (and its draw) happened
+		private List<HandCard> _handAfterMulligan;
+		private int _myTurnsStarted;
+		private bool _openingOver;
+		private bool _turn1DrawSeen;
+		public List<HandCard> OpeningHand => _openingHand;
+		public List<HandCard> HandAfterMulligan => _handAfterMulligan;
+		public int DeckCountAtOpening => _deckCountAtOpening;
+		/// <summary>True once the opponent's turn starts after the player's turn 1 (the one-drop line is hidden then).</summary>
+		public bool OpeningOver => _openingOver;
+		/// <summary>The player's turn-1 draw has arrived.</summary>
+		public bool Turn1DrawSeen => _turn1DrawSeen;
+
 		// odds prediction vs outcome
 		private readonly List<Prediction> _predictions = new List<Prediction>();
 		public List<HandCard> LastHand => _lastHand;
@@ -144,6 +157,10 @@ namespace DiscardOdds
 			_mulliganTossEvents.Clear();
 			_mulliganLogged = false;
 			_deckCountAtOpening = 0;
+			_handAfterMulligan = null;
+			_myTurnsStarted = 0;
+			_openingOver = false;
+			_turn1DrawSeen = false;
 			_platys.Clear();
 			_predictions.Clear();
 
@@ -176,6 +193,8 @@ namespace DiscardOdds
 		{
 			_myTurn = who == ActivePlayer.Player;
 			try { _turn = HdtApi.Core.Game.GetTurnNumber(); } catch { }
+			if(_myTurn) _myTurnsStarted++;
+			else if(_myTurnsStarted > 0) _openingOver = true;
 			ProbeLog.Line("TURN", $"turn {_turn} start: {who} | hand={Fmt(_lastHand)}");
 			if(_myTurn)
 				DumpDeck("own_turn_start", HdtConfigVerbose);
@@ -209,6 +228,7 @@ namespace DiscardOdds
 			if(mulliganDone && !_mulliganLogged && _openingHand != null)
 			{
 				_mulliganLogged = true;
+				_handAfterMulligan = hand;
 				LogMulliganResult(hand);
 				DumpDeck("mulligan_done", true);
 			}
@@ -316,6 +336,7 @@ namespace DiscardOdds
 
 		public void OnPlayerDraw(Card card)
 		{
+			if(_myTurn && _myTurnsStarted == 1) _turn1DrawSeen = true;
 			LinkPlatyDraw(card);
 			FeedDrawPrediction(card);
 			// N/M are not read here: HDT's PlayerCardList still holds the card just drawn (DeckCount has already dropped).

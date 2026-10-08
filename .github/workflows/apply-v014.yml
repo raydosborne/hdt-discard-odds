@@ -1,0 +1,50 @@
+name: apply-v014
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Apply v0.1.4 patch
+        run: |
+          set -euo pipefail
+          cat .github/v014/p0.b64 .github/v014/p1.b64 | tr -d '\n' | base64 -d | xz -d > /tmp/v014.patch
+          git apply --check /tmp/v014.patch
+          git apply /tmp/v014.patch
+      - name: Verify file contents (git blob sha)
+        run: |
+          set -euo pipefail
+          bad=0
+          while read -r sha path; do
+            got=$(git hash-object "$path")
+            if [ "$got" != "$sha" ]; then echo "MISMATCH $path $got != $sha"; bad=1; else echo "ok $path"; fi
+          done <<'EOF'
+          3bb94da90e78482b078f5341fb3866d70121d6a6 README.md
+          a2b4f10cb0b35e8964c91f912c7cdcef03bb9a09 src/DiscardOddsPlugin.UI.cs
+          09a5e5fadf3c853b10b45809cab959ffdb30e076 src/DiscardOddsPlugin.cs
+          ce85e6da43073619da4e9d822f004464a5463392 src/PayoffWidget.cs
+          c314acb0cbf326934e87de138fd0def2f598b070 src/TargetConfig.cs
+          593940f4804b29444fbff65a5ed690fc9e6d7c4c src/WidgetPolicy.cs
+          e44c0212cf7e238135172c3161d263d44b4d8e58 tests/OddsEngine.Tests/OddsEngine.Tests.csproj
+          05d38a329f509048116cdbedc378e0cc69a68c3d tests/OddsEngine.Tests/Program.cs
+          EOF
+          exit $bad
+      - name: Unit tests
+        run: |
+          cd tests/OddsEngine.Tests
+          dotnet run -c Release
+      - name: Commit and remove one-shot files
+        run: |
+          set -euo pipefail
+          git config user.name "Ray D Osborne"
+          git config user.email "raydosborne@gmail.com"
+          git rm -q .github/v014/p0.b64 .github/v014/p1.b64 .github/workflows/apply-v014.yml
+          git add README.md src tests
+          git commit -m "v0.1.4: Occultist/Gemstone never on widget, Hand of Gul'dan details-only, no Next line or legend, yellow LETHAL, one-drop exclusions (Wicked Whispers), README results"
+          git push

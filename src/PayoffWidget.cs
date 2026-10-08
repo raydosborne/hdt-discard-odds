@@ -13,6 +13,7 @@ namespace DiscardOdds
 	/// <summary>One widget line: either an odds row (name, hit % green, miss % red) or plain text.</summary>
 	public sealed class WidgetRow
 	{
+		public string CardId;          // card the line is about (WidgetPolicy guard: hidden cards are never drawn)
 		public string Name;            // card name (gold) at the start of the line
 		public bool NameIsLabel;       // Name is a plain label (e.g. "Next draw"), not a card: white instead of gold
 		public double? Hit;            // odds row when set
@@ -48,11 +49,14 @@ namespace DiscardOdds
 		public static readonly SolidColorBrush Light = B(0xC8, 0xC8, 0xC8);
 		public static readonly SolidColorBrush Dim = B(0x9A, 0xA0, 0xA6);
 		public static readonly SolidColorBrush Note = B(0xB3, 0x9D, 0xDB);     // rare-event note (lavender, kept apart from the gold names)
+		public static readonly SolidColorBrush Lethal = B(0xFF, 0xEE, 0x00);   // LETHAL line: bright yellow, bold (short = red)
 	}
 
 	/// <summary>
-	/// Overlay widget (Compact mode default): short header "Next hit% · n/m", the lethal line on your turn, one short
-	/// line per odds card in hand, and the opening one-drop line. Reasons are hidden unless "Show details" is on.
+	/// Overlay widget (Compact mode default): the lethal line on your turn, one short line per odds card in hand, and the
+	/// opening one-drop line. No next-draw header or remaining-copies counts (HDT shows those) and no color legend (see the
+	/// README). Reasons and details-only lines (Hand of Gul'dan) appear only with "Show details"; cards WidgetPolicy marks
+	/// Never (Ocular Occultist, Gemstone Hoarder) are never drawn.
 	/// Built in code (no XAML) so the project compiles with the plain .NET SDK.
 	/// Drag: unlock via the Plugins menu. While unlocked, a low-level mouse hook (HDT's own User32.MouseInput,
 	/// the same approach as the DrawPool plugin) moves the widget; position is saved as fractions of the overlay size.
@@ -116,27 +120,24 @@ namespace DiscardOdds
 			_rows.Children.Clear();
 			var headSize = _settings.CompactMode ? 11.5 : 13;
 			var rowSize = _settings.CompactMode ? 11 : 12.5;
-			if(c.Header != null) _header.Children.Add(RowBlock(c.Header, headSize));
+			if(c.Header != null && WidgetPolicy.Place(c.Header.CardId, c.Header.NameIsLabel ? null : c.Header.Name) != WidgetPlacement.Never)
+				_header.Children.Add(RowBlock(c.Header, headSize));
 			foreach(var r in c.Rows)
 			{
-				if(r.DetailOnly && !_settings.ShowDetails) continue;
+				// Last-line guard, whatever the caller sent: hidden cards never, details-only cards only with Show details.
+				var place = WidgetPolicy.Place(r.CardId, r.NameIsLabel ? null : r.Name);
+				if(place == WidgetPlacement.Never) continue;
+				if((r.DetailOnly || place == WidgetPlacement.DetailsOnly) && !_settings.ShowDetails) continue;
 				_rows.Children.Add(RowBlock(r, rowSize));
 			}
-			if(_settings.ShowDetails)
-			{
-				var legend = new TextBlock { FontSize = _settings.CompactMode ? 9 : 10, Margin = new Thickness(0, 1, 0, 0), TextWrapping = TextWrapping.Wrap, MaxWidth = MaxW };
-				legend.Inlines.Add(new Run("card") { Foreground = WidgetColors.CardName });
-				legend.Inlines.Add(new Run(" · ") { Foreground = WidgetColors.Dim });
-				legend.Inlines.Add(new Run("hit %") { Foreground = WidgetColors.Hit, FontWeight = FontWeights.Bold });
-				legend.Inlines.Add(new Run(" / ") { Foreground = WidgetColors.Dim });
-				legend.Inlines.Add(new Run("miss %") { Foreground = WidgetColors.Miss });
-				legend.Inlines.Add(new Run(" · → discards: ") { Foreground = WidgetColors.Dim });
-				legend.Inlines.Add(new Run("highest Cost") { Foreground = WidgetColors.Highest });
-				legend.Inlines.Add(new Run(" · ") { Foreground = WidgetColors.Dim });
-				legend.Inlines.Add(new Run("lowest Cost") { Foreground = WidgetColors.Lowest });
-				legend.Inlines.Add(new Run(" · bold = target · ≈ approximate") { Foreground = WidgetColors.Dim });
-				_rows.Children.Add(legend);
-			}
+			UpdateEmpty();
+		}
+
+		/// <summary>Nothing to show (no lines, no lethal line, locked): hide the box instead of drawing an empty frame.</summary>
+		private void UpdateEmpty()
+		{
+			if(!Unlocked && _header.Children.Count == 0 && _rows.Children.Count == 0 && _lethal.Visibility != Visibility.Visible)
+				Visibility = Visibility.Collapsed;
 		}
 
 		private TextBlock RowBlock(WidgetRow r, double size)
@@ -221,12 +222,17 @@ namespace DiscardOdds
 			Canvas.SetTop(this, Clamp(_settings.WidgetTopFraction, 0, 0.98) * h);
 		}
 
-		/// <summary>Lethal-check line (null hides it): bold, green when lethal, red when short. Detail only with "Show details".</summary>
+		/// <summary>Lethal-check line (null hides it): bold bright yellow (one size up) when lethal, red when short. Detail only with "Show details".</summary>
 		public void SetLethal(string line, string detail, bool lethal)
 		{
 			if(line == null) { _lethal.Visibility = Visibility.Collapsed; return; }
 			_lethal.Inlines.Clear();
-			_lethal.Inlines.Add(new Run(line) { FontWeight = FontWeights.Bold, Foreground = lethal ? WidgetColors.Hit : WidgetColors.Miss });
+			_lethal.Inlines.Add(new Run(line)
+			{
+				FontWeight = lethal ? FontWeights.ExtraBold : FontWeights.Bold,
+				Foreground = lethal ? WidgetColors.Lethal : WidgetColors.Miss,
+				FontSize = _lethal.FontSize + (lethal ? 1.5 : 0)
+			});
 			if(_settings.ShowDetails && !string.IsNullOrEmpty(detail))
 				_lethal.Inlines.Add(new Run("\n " + detail) { FontSize = _settings.CompactMode ? 9 : 10.5, FontWeight = FontWeights.Normal, Foreground = WidgetColors.Dim });
 			_lethal.Visibility = Visibility.Visible;

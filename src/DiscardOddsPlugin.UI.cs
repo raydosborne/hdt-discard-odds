@@ -15,6 +15,7 @@ namespace DiscardOdds
 		/// <summary>
 		/// Opening one-drop line (1-cost cards in the active deck list): during the mulligan and on your turn 1 only.
 		/// Odds use OneDropOdds (tossed cards can't come back as their own replacements).
+		/// 1-cost cards in the deck's "oneDropExclude" list (default for the Discard preset: Wicked Whispers) don't count.
 		/// </summary>
 		private void AddOneDropRows(List<WidgetRow> rows)
 		{
@@ -24,8 +25,8 @@ namespace DiscardOdds
 				var game = HdtApi.Core.Game;
 				var player = game?.Player;
 				if(player == null) return;
-				var ones = new HashSet<string>(_deckCards.Where(d => d.Cost == 1).Select(d => d.Id));
-				var kList = _deckCards.Where(d => d.Cost == 1).Sum(d => d.Copies);
+				var ones = WidgetPolicy.OneDropIds(_deckCards.Select(d => (d.Id, d.Cost)), Targets.Resolved?.OneDropExclude);
+				var kList = _deckCards.Where(d => ones.Contains(d.Id)).Sum(d => d.Copies);
 				if(kList == 0) return;
 				var hand = _probes.LastHand.Where(h => !h.IsCoin).ToList();
 				if(hand.Count == 0) return;
@@ -133,7 +134,7 @@ namespace DiscardOdds
 			_updateItem.Click += (s, e) => OpenUrl(_updater?.Latest?.HtmlUrl ?? UpdateLogic.ReleasesPage);
 			var lethal = new MenuItem { Header = "Show lethal check (your turn)", IsCheckable = true, IsChecked = _settings?.ShowLethalCheck ?? true };
 			lethal.Click += (s, e) => { if(_settings == null) return; _settings.ShowLethalCheck = lethal.IsChecked; _settings.Save(); UpdateWidget(true); };
-			var details = new MenuItem { Header = "Show details (reasons + color legend)", IsCheckable = true, IsChecked = _settings?.ShowDetails ?? false };
+			var details = new MenuItem { Header = "Show details (reasons, Hand of Gul'dan)", IsCheckable = true, IsChecked = _settings?.ShowDetails ?? false };
 			details.Click += (s, e) => { if(_settings == null) return; _settings.ShowDetails = details.IsChecked; _settings.Save(); UpdateWidget(true); };
 			var compact = new MenuItem { Header = "Compact mode (smaller widget)", IsCheckable = true, IsChecked = _settings?.CompactMode ?? true };
 			compact.Click += (s, e) => { if(_settings == null) return; _settings.CompactMode = compact.IsChecked; _settings.Save(); UpdateWidget(true); };

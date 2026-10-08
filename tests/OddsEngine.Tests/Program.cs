@@ -304,9 +304,9 @@ internal static class Program
 		var genDiscard = OddsRule.ForCard("ZZ_1", "Some Draw", "When you play or discard this, draw 2 cards.");
 		CheckTrue("generic 'play or discard this, draw N' -> OnDiscard, not ≈", genDiscard.OnDiscard && !genDiscard.Approx && genDiscard.Clause == null);
 		var ocu = new OddsRule { CardId = "CATA_490", Name = "Ocular", Kind = OddsKind.DiscardChoose };
-		CheckTrue("Ocular with a target in hand: 100% by choice -> details only", OddsEngine.Compute(ocu, vs).ByChoice && OddsEngine.Compute(ocu, vs).Hit == 1);
+		CheckTrue("Ocular with a target in hand: 100% by choice (ByChoice -> never on the widget)", OddsEngine.Compute(ocu, vs).ByChoice && OddsEngine.Compute(ocu, vs).Hit == 1);
 		var noTarget = new OddsState { Deck = deck, DeckCount = 24, Group = payoffs, Hand = new List<OddsHandCard> { H(41, "CATA_490", 3, false), H(42, "X1", 2, false) } };
-		CheckTrue("Ocular with no target: still details-only (never on main widget), 0%", OddsEngine.Compute(ocu, noTarget, 41).ByChoice && OddsEngine.Compute(ocu, noTarget, 41).Hit == 0);
+		CheckTrue("Ocular with no target: still ByChoice (never on the widget), 0%", OddsEngine.Compute(ocu, noTarget, 41).ByChoice && OddsEngine.Compute(ocu, noTarget, 41).Hit == 0);
 		CheckTrue("Gemstone Hoarder also always ByChoice", OddsEngine.Compute(rules["CATA_897"], vs).ByChoice);
 		var cs = new OddsState { Deck = deck, DeckCount = 24, Group = payoffs, Hand = new List<OddsHandCard> { H(51, "END_016", 4, false), H(52, "RLK_534", 4, true), H(53, "X2", 4, false), H(54, "X3", 1, false) } };
 		var cl = OddsEngine.Compute(rules["END_016"], cs, 51);
@@ -318,6 +318,49 @@ internal static class Program
 		var emSure = OddsEngine.Compute(rules["ULD_163"], cs, 51);
 		CheckTrue("Expired Merchant when certain -> no %, just the target", emSure.NoOdds && emSure.Hit == 1 && emSure.DiscardNames.Count == 1);
 		CheckTrue("Wicked Whispers keeps % (lowest rule unchanged)", !OddsEngine.Compute(rules["DMF_119"], cs).NoOdds);
+
+		// ---- v0.1.4: WidgetPolicy is the single gate for what the widget may draw (every mode, details on or off)
+		var wp = new OddsState { Deck = deck, DeckCount = 24, Group = payoffs, CardText = id => id == "BT_300" ? "When you play or discard this, draw 3 cards." : null };
+		wp.Hand = new List<OddsHandCard> { H(61, "CATA_490", 3, false), H(62, "CATA_897", 3, false), H(63, "BT_300", 6, true), H(64, "DMF_119", 1, false), H(65, "RLK_534", 4, true) };
+		var wpAll = OddsEngine.ForHand(wp, rules);
+		foreach(var details in new[] { false, true })
+		{
+			var shown = WidgetPolicy.ForWidget(wpAll, details);
+			CheckTrue($"Ocular Occultist / Gemstone Hoarder never on the widget (Show details {(details ? "on" : "off")}), even with a target in hand",
+				shown.All(o => o.CardId != "CATA_490" && o.CardId != "CATA_897"));
+			CheckTrue($"Hand of Gul'dan only with Show details (details {(details ? "on" : "off")})", shown.Any(o => o.CardId == "BT_300") == details);
+			CheckTrue($"Wicked Whispers stays on the main widget (details {(details ? "on" : "off")})", shown.Any(o => o.CardId == "DMF_119"));
+		}
+		CheckTrue("Ocular with no target (0%) is still never shown", WidgetPolicy.Place(OddsEngine.Compute(ocu, noTarget, 41)) == WidgetPlacement.Never);
+		CheckTrue("hidden by name too (Platysaur 'holds Ocular Occultist' row, unknown id)", WidgetPolicy.Place(null, "Ocular Occultist") == WidgetPlacement.Never
+			&& WidgetPolicy.Place(null, "Gemstone Hoarder") == WidgetPlacement.Never);
+		CheckTrue("Hand of Gul'dan by name / label / story id -> details only", WidgetPolicy.Place(null, "Hand of Gul'dan") == WidgetPlacement.DetailsOnly
+			&& WidgetPolicy.Place(null, "Gul'dan (discard)") == WidgetPlacement.Main && WidgetPolicy.Place("BT_300", "Gul'dan (discard)") == WidgetPlacement.DetailsOnly
+			&& WidgetPolicy.Place("Story_09_HandofGuldan", null) == WidgetPlacement.DetailsOnly);
+		CheckTrue("any choose-the-discard rule is hidden, whatever the card", WidgetPolicy.Place(new CardOdds { CardId = "ZZ_9", Name = "New Chooser", Kind = OddsKind.DiscardChoose }) == WidgetPlacement.Never);
+		CheckTrue("ordinary cards and labels stay on the main widget", WidgetPolicy.Place("RLK_534", "Soul Barrage") == WidgetPlacement.Main && WidgetPolicy.Place(null, "Duke of Below") == WidgetPlacement.Main);
+
+		// ---- v0.1.4: one-drop exclusions (Wicked Whispers doesn't count as a turn-1 play for the Discard preset)
+		var oneDeck = new[] { ("DMF_119", 1), ("TLC_603", 1), ("CATA_493", 1), ("CATA_490", 3), ("RLK_534", 4) };
+		CheckTrue("one-drops without exclusions: all 1-cost cards", WidgetPolicy.OneDropIds(oneDeck, null).SetEquals(new[] { "DMF_119", "TLC_603", "CATA_493" }));
+		CheckTrue("one-drops with Wicked Whispers excluded", WidgetPolicy.OneDropIds(oneDeck, new HashSet<string> { "DMF_119" }).SetEquals(new[] { "TLC_603", "CATA_493" }));
+		var exCfg = TargetConfig.CreateDefault();
+		CheckTrue("default Discard preset excludes Wicked Whispers from one-drops", exCfg.Presets[0].OneDropExclude.Select(t => t.Id).SequenceEqual(new[] { "DMF_119" }));
+		CheckTrue("preset deck: one-drop excludes = DMF_119", exCfg.Resolve("g-1", "Discardo", discardDeck).OneDropExclude.SetEquals(new[] { "DMF_119" }));
+		exCfg.SetDeckTargets("g-1", "Discardo", new[] { new TargetCard { Id = "RLK_534" } });
+		var exOwn = exCfg.Resolve("g-1", "Discardo", discardDeck);
+		CheckTrue("own target list without oneDropExclude still inherits the preset's (DMF_119)", exOwn.Source == "deck" && exOwn.OneDropExclude.SetEquals(new[] { "DMF_119" }));
+		exCfg.FindDeck("g-1", null).OneDropExclude = new List<TargetCard>();
+		CheckTrue("explicit empty oneDropExclude on the deck -> nothing excluded", exCfg.Resolve("g-1", "Discardo", discardDeck).OneDropExclude.Count == 0);
+		CheckTrue("unrelated deck: no one-drop exclusions", exCfg.Resolve("g-2", "Mage", new[] { "CS2_029" }).OneDropExclude.Count == 0);
+		var exRound = TargetConfig.Parse(exCfg.ToJson());
+		CheckTrue("oneDropExclude round-trips (preset list + explicit empty deck list)", exRound.Presets[0].OneDropExclude.Count == 1 && exRound.Presets[0].OneDropExclude[0].Id == "DMF_119"
+			&& exRound.Decks[0].OneDropExclude != null && exRound.Decks[0].OneDropExclude.Count == 0);
+		var legacy = TargetConfig.Parse("{ \"presets\": [ { \"name\": \"Discard Warlock payoffs\", \"autoApplyMinMatches\": 3, \"targets\": [\"RLK_534\", \"RLK_532\", \"BT_300\"] }, { \"name\": \"Other\", \"targets\": [] } ] }");
+		CheckTrue("pre-v0.1.4 targets.json: built-in Discard preset gets the Wicked Whispers default, others none",
+			legacy.Presets[0].OneDropExclude?.Count == 1 && legacy.Presets[0].OneDropExclude[0].Id == "DMF_119" && legacy.Presets[1].OneDropExclude == null);
+		var handEx = TargetConfig.Parse("{ \"decks\": [ { \"deckName\": \"D\", \"targets\": [], \"oneDropExclude\": [\"DMF_119\", {\"id\": \"TLC_603\"}] } ] }");
+		CheckTrue("hand-written deck oneDropExclude (string ids and objects)", handEx.Resolve(null, "D", new string[0]).OneDropExclude.SetEquals(new[] { "DMF_119", "TLC_603" }));
 
 		// ---- settings: new toggles round-trip
 		var st2 = PluginSettings.Parse(new[] { "ShowDetails=True", "ShowOneDrop=False", "CompactMode=False" });

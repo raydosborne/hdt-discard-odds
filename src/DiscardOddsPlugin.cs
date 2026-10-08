@@ -185,7 +185,7 @@ namespace DiscardOdds
 			var resolved = _targetConfig.Resolve(id, name, cards.Select(c => c.Id));
 			Targets.Resolved = resolved;
 			Targets.Current = resolved.Ids;
-			ProbeLog.Line("TARGETS", $"deck '{name}' ({id}): {resolved.Describe()} -> [{string.Join(",", resolved.Ids)}]");
+			ProbeLog.Line("TARGETS", $"deck '{name}' ({id}): {resolved.Describe()} -> [{string.Join(",", resolved.Ids)}]; one-drop excludes [{string.Join(",", resolved.OneDropExclude)}]");
 		}
 
 		private void OpenTargetsWindow()
@@ -260,38 +260,15 @@ namespace DiscardOdds
 					Show("No target cards set for this deck", "Plugins → Discard Odds → Choose target cards…", oneDrop);
 					return;
 				}
-				var (n, m, known) = GameReader.PayoffCount(Targets.Current);
+				var (_, m, known) = GameReader.PayoffCount(Targets.Current);
 				var unknown = m - known;
+				// No "Next X% · n/m" header and no "targets left n/m" counts: HDT's own deck list already shows remaining copies.
 				var c = new WidgetContent();
-				// Header: compact "Next 32% · 8/25" (or "Next draw" when Compact mode is off); targets list only in details / roomy mode.
-				var remaining = GameReader.RemainingDeck();
-				var inList = _deckCards.Where(d => Targets.Current.Contains(d.Id)).ToList();
-				var hit = m > 0 ? (double)n / m : 0;
-				var targetsSuffix = inList.Count == 0 ? "no targets in this deck list"
-					: string.Join(" · ", inList.Select(d => $"{d.Name} {(remaining.TryGetValue(d.Id, out var left) ? left : 0)}/{d.Copies}"));
-				if(_settings.CompactMode)
-				{
-					c.Header = new WidgetRow
-					{
-						Text = $"Next {OddsEngine.Pct(hit)} · {n}/{m}", Bold = true, TextColor = WidgetColors.Text,
-						Detail = targetsSuffix + (unknown > 0 ? $"; {unknown} unknown as misses" : "")
-					};
-				}
-				else
-				{
-					c.Header = new WidgetRow
-					{
-						Name = $"Next draw ({n}/{m})", NameIsLabel = true,
-						Hit = hit,
-						Suffix = targetsSuffix,
-						Detail = $"{n} target cards among the {m} cards left" + (unknown > 0 ? $"; {unknown} unknown card(s) counted as misses" : "")
-					};
-				}
 				c.Rows.AddRange(oneDrop);
 				// One line per odds card in hand (one per entity, never two): "if you play it" hit / miss.
-				// Hand of Gul'dan gets a single "(discard)" line; its played odds are in the detail only.
-				// A hit that is 100% only because you choose the discard (Ocular Occultist) is shown only with Show details.
-				// Chronoclaws (and Expired Merchant when certain) show only "→ the card(s) it would discard", no %.
+				// WidgetPolicy decides placement for every line: Ocular Occultist / Gemstone Hoarder (you choose the discard) are
+				// never added, in any mode, not even with Show details (v0.1.3 still drew them when Show details was on).
+				// Hand of Gul'dan is details-only. Chronoclaws (and Expired Merchant when certain) show only "→ the card(s) it would discard".
 				var lastHand = _probes.LastHand;
 				var state = GameReader.BuildOddsState(lastHand, Targets.Current);
 				var outletInHand = lastHand.Any(h => h.CardId != null && CardIds.OutletRule.ContainsKey(h.CardId) && h.CardId != CardIds.Platysaur);
@@ -299,6 +276,8 @@ namespace DiscardOdds
 				var rowCards = new HashSet<string>();
 				foreach(var o in OddsEngine.ForHand(state, OddsRule.CardRules))
 				{
+					var place = WidgetPolicy.Place(o);
+					if(place == WidgetPlacement.Never) continue;
 					if(!rowEntities.Add(o.EntityId) || !rowCards.Add(o.CardId)) continue;
 					var detail = o.Detail;
 					if(o.CardId == "BT_300")
@@ -307,18 +286,23 @@ namespace DiscardOdds
 						detail += outletInHand ? " · a discard card is in hand" : " · no discard card in hand";
 						if(hog != null && hog.HasTempEnchant) detail += " · Temporary: burns at end of turn";
 					}
-					var name = (_settings.CompactMode && o.CardId == "BT_300") ? "Gul'dan (discard)" : o.Name;
-					c.Rows.Add(new WidgetRow { Name = name, Hit = o.Hit, Approx = o.Approx, Detail = detail, DiscardRule = o.DiscardRule, DiscardNames = o.DiscardNames, DetailOnly = o.ByChoice, NoOdds = o.NoOdds });
+					var name = o.CardId == "BT_300" ? "Gul'dan (discard)" : o.Name;
+					c.Rows.Add(new WidgetRow { CardId = o.CardId, Name = name, Hit = o.Hit, Approx = o.Approx, Detail = detail, DiscardRule = o.DiscardRule, DiscardNames = o.DiscardNames, DetailOnly = place == WidgetPlacement.DetailsOnly, NoOdds = o.NoOdds });
 				}
 				// Duke of Below: 2/2 + 2/2 per card discarded this game (EntitiesDiscardedFromHand, 4/4 in the live test).
 				var discards = GameReader.Player?.EntitiesDiscardedFromHand.Count ?? 0;
 				if(lastHand.Any(h => h.CardId == CardIds.Duke))
 					c.Rows.Add(new WidgetRow { Name = "Duke of Below", Text = $"{2 + 2 * discards}/{2 + 2 * discards}", TextColor = WidgetColors.Text });
 				foreach(var l in _probes.LivePlatysaurLinks())
-					c.Rows.Add(new WidgetRow { Name = "Platysaur", Text = $"holds {l.drawnName}{(l.payoff ? " (target)" : "")}", Bold = l.payoff, TextColor = WidgetColors.Text });
+				{
+					// A Platysaur holding a hidden card (e.g. Ocular Occultist) never names it; Hand of Gul'dan only with Show details.
+					var place = WidgetPolicy.Place(null, l.drawnName);
+					if(place == WidgetPlacement.Never) continue;
+					c.Rows.Add(new WidgetRow { Name = "Platysaur", Text = $"holds {l.drawnName}{(l.payoff ? " (target)" : "")}", Bold = l.payoff, TextColor = WidgetColors.Text, DetailOnly = place == WidgetPlacement.DetailsOnly });
+				}
 				var cwd = GameReader.CastsWhenDrawnInDeck();
 				if(cwd > 0)
-					c.Rows.Add(new WidgetRow { Text = $"+{cwd} Casts-When-Drawn card(s) in deck not counted in M", Small = true, DetailOnly = true, TextColor = WidgetColors.Dim });
+					c.Rows.Add(new WidgetRow { Text = $"+{cwd} Casts-When-Drawn card(s) in deck not counted", Small = true, DetailOnly = true, TextColor = WidgetColors.Dim });
 				if(unknown > 0)
 					c.Rows.Add(new WidgetRow { Text = $"{unknown} unknown card(s) in deck counted as misses", Small = true, DetailOnly = true, TextColor = WidgetColors.Dim });
 				_widget.SetContent(c);

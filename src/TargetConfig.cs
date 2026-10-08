@@ -14,6 +14,10 @@ namespace DiscardOdds
 	// Each deck gets its own list, keyed by HDT deck id (falls back to the deck name, so a re-imported deck still matches).
 	// Presets are example lists; a preset with autoApplyMinMatches > 0 is used for any deck that has no list of its own
 	// but contains at least that many of the preset's cards.
+	//
+	// "oneDropExclude" (deck or preset) lists 1-cost cards that should NOT count as a turn-1 play in the one-drop odds
+	// (e.g. Wicked Whispers: a turn-1 Whispers does nothing). A deck without its own "oneDropExclude" inherits it from the
+	// first auto-matching preset, even when the deck has its own target list.
 
 	public sealed class TargetCard
 	{
@@ -26,6 +30,8 @@ namespace DiscardOdds
 		public string DeckId;
 		public string DeckName;
 		public List<TargetCard> Targets = new List<TargetCard>();
+		/// <summary>null = not set (inherit from the matching preset); empty = exclude nothing.</summary>
+		public List<TargetCard> OneDropExclude;
 	}
 
 	public sealed class TargetPreset
@@ -34,6 +40,8 @@ namespace DiscardOdds
 		public string Note;
 		public int AutoApplyMinMatches;
 		public List<TargetCard> Targets = new List<TargetCard>();
+		/// <summary>1-cost cards that don't count as a turn-1 play for decks using this preset. null = none.</summary>
+		public List<TargetCard> OneDropExclude;
 	}
 
 	public sealed class ResolvedTargets
@@ -42,6 +50,8 @@ namespace DiscardOdds
 		/// <summary>"deck", "preset", or "none".</summary>
 		public string Source = "none";
 		public string PresetName;
+		/// <summary>1-cost card ids that don't count as a 1-drop in the one-drop odds.</summary>
+		public HashSet<string> OneDropExclude = new HashSet<string>();
 
 		public string Describe() => Source == "deck" ? "your list for this deck"
 			: Source == "preset" ? $"preset '{PresetName}' (auto)"
@@ -51,6 +61,11 @@ namespace DiscardOdds
 	public sealed class TargetConfig
 	{
 		public const int CurrentVersion = 1;
+		public const string DiscardPresetName = "Discard Warlock payoffs";
+
+		/// <summary>Default one-drop exclusions for the built-in Discard preset: Wicked Whispers.</summary>
+		public static List<TargetCard> DefaultDiscardOneDropExclude() =>
+			new List<TargetCard> { new TargetCard { Id = "DMF_119", Name = "Wicked Whispers" } };
 		public List<DeckTargets> Decks = new List<DeckTargets>();
 		public List<TargetPreset> Presets = new List<TargetPreset>();
 
@@ -61,7 +76,7 @@ namespace DiscardOdds
 			{
 				new TargetPreset
 				{
-					Name = "Discard Warlock payoffs",
+					Name = DiscardPresetName,
 					Note = "Example preset: cards with a 'when discarded' effect. Used automatically for decks with no list of their own that contain 3+ of these.",
 					AutoApplyMinMatches = 3,
 					Targets =
@@ -71,7 +86,8 @@ namespace DiscardOdds
 						new TargetCard { Id = "BT_300", Name = "Hand of Gul'dan" },
 						new TargetCard { Id = "CATA_499", Name = "Disposable Acolytes" },
 						new TargetCard { Id = "KAR_205", Name = "Silverware Golem" },
-					}
+					},
+					OneDropExclude = DefaultDiscardOneDropExclude()
 				}
 			}
 		};
@@ -109,30 +125,33 @@ namespace DiscardOdds
 		}
 
 		/// <summary>Target set for a deck: its own list if present (even if empty), else the first auto-matching preset.</summary>
+		/// <remarks>One-drop exclusions: the deck's own "oneDropExclude" if set, else the auto-matching preset's.</remarks>
 		public ResolvedTargets Resolve(string deckId, string deckName, IEnumerable<string> deckCardIds)
 		{
 			var r = new ResolvedTargets();
 			var own = FindDeck(deckId, deckName);
+			var inDeck = new HashSet<string>(deckCardIds ?? Enumerable.Empty<string>());
+			var preset = MatchPreset(inDeck);
+			if(own?.OneDropExclude != null) r.OneDropExclude = new HashSet<string>(own.OneDropExclude.Select(t => t.Id));
+			else if(preset?.OneDropExclude != null) r.OneDropExclude = new HashSet<string>(preset.OneDropExclude.Select(t => t.Id));
 			if(own != null)
 			{
 				r.Source = "deck";
 				r.Ids = new HashSet<string>(own.Targets.Select(t => t.Id));
 				return r;
 			}
-			var inDeck = new HashSet<string>(deckCardIds ?? Enumerable.Empty<string>());
-			foreach(var p in Presets.Where(p => p.AutoApplyMinMatches > 0))
+			if(preset != null)
 			{
-				var ids = new HashSet<string>(p.Targets.Select(t => t.Id));
-				if(ids.Count(inDeck.Contains) >= p.AutoApplyMinMatches)
-				{
-					r.Source = "preset";
-					r.PresetName = p.Name;
-					r.Ids = ids;
-					return r;
-				}
+				r.Source = "preset";
+				r.PresetName = preset.Name;
+				r.Ids = new HashSet<string>(preset.Targets.Select(t => t.Id));
 			}
 			return r;
 		}
+
+		private TargetPreset MatchPreset(HashSet<string> inDeck) =>
+			Presets.Where(p => p.AutoApplyMinMatches > 0)
+				.FirstOrDefault(p => p.Targets.Select(t => t.Id).Distinct().Count(inDeck.Contains) >= p.AutoApplyMinMatches);
 
 		// ------------------------------------------------------------------ JSON
 
@@ -143,24 +162,30 @@ namespace DiscardOdds
 			var cfg = new TargetConfig();
 			if(root.TryGetValue("decks", out var decks) && decks is List<object> dl)
 				foreach(var o in dl.OfType<Dictionary<string, object>>())
-					cfg.Decks.Add(new DeckTargets { DeckId = Str(o, "deckId"), DeckName = Str(o, "deckName"), Targets = Cards(o) });
+					cfg.Decks.Add(new DeckTargets { DeckId = Str(o, "deckId"), DeckName = Str(o, "deckName"), Targets = Cards(o), OneDropExclude = CardsOrNull(o, "oneDropExclude") });
 			if(root.TryGetValue("presets", out var presets) && presets is List<object> pl)
 				foreach(var o in pl.OfType<Dictionary<string, object>>())
 					cfg.Presets.Add(new TargetPreset
 					{
 						Name = Str(o, "name") ?? "preset", Note = Str(o, "note"),
 						AutoApplyMinMatches = o.TryGetValue("autoApplyMinMatches", out var n) && n is double d ? (int)d : 0,
-						Targets = Cards(o)
+						Targets = Cards(o),
+						OneDropExclude = CardsOrNull(o, "oneDropExclude")
 					});
+			// Files written before v0.1.4 have no "oneDropExclude": give the built-in Discard preset its default (Wicked Whispers).
+			foreach(var p in cfg.Presets.Where(p => p.OneDropExclude == null && p.Name == DiscardPresetName))
+				p.OneDropExclude = DefaultDiscardOneDropExclude();
 			return cfg;
 		}
 
 		private static string Str(Dictionary<string, object> o, string k) => o.TryGetValue(k, out var v) ? v as string : null;
 
-		private static List<TargetCard> Cards(Dictionary<string, object> o)
+		private static List<TargetCard> Cards(Dictionary<string, object> o, string key = "targets") => CardsOrNull(o, key) ?? new List<TargetCard>();
+
+		private static List<TargetCard> CardsOrNull(Dictionary<string, object> o, string key)
 		{
+			if(!o.TryGetValue(key, out var t) || !(t is List<object> list)) return null;
 			var res = new List<TargetCard>();
-			if(!o.TryGetValue("targets", out var t) || !(t is List<object> list)) return res;
 			foreach(var item in list)
 			{
 				if(item is string s && s.Trim().Length > 0) res.Add(new TargetCard { Id = s.Trim() });
@@ -174,7 +199,7 @@ namespace DiscardOdds
 		{
 			var sb = new StringBuilder();
 			sb.Append("{\n");
-			sb.Append("  \"_help\": \"Target cards per deck. Edit here or via HDT: Plugins > Discard Odds > Choose target cards. Targets are HearthstoneJSON card ids (e.g. RLK_534); 'name' is only a label. A deck matches by deckId first, then by deckName. Presets with autoApplyMinMatches > 0 are used for decks without their own list that contain at least that many preset cards.\",\n");
+			sb.Append("  \"_help\": \"Target cards per deck. Edit here or via HDT: Plugins > Discard Odds > Choose target cards. Targets are HearthstoneJSON card ids (e.g. RLK_534); 'name' is only a label. A deck matches by deckId first, then by deckName. Presets with autoApplyMinMatches > 0 are used for decks without their own list that contain at least that many preset cards. 'oneDropExclude' lists 1-cost cards that don't count as a turn-1 play in the one-drop odds (a deck without its own inherits the matching preset's).\",\n");
 			sb.Append("  \"version\": ").Append(CurrentVersion).Append(",\n");
 			sb.Append("  \"decks\": [");
 			for(var i = 0; i < Decks.Count; i++)
@@ -186,6 +211,7 @@ namespace DiscardOdds
 				sb.Append("      \"deckName\": ").Append(Q(d.DeckName)).Append(",\n");
 				sb.Append("      \"targets\": ");
 				WriteCards(sb, d.Targets, "      ");
+				WriteExclude(sb, d.OneDropExclude);
 				sb.Append("\n    }");
 			}
 			sb.Append(Decks.Count > 0 ? "\n  ],\n" : "],\n");
@@ -200,11 +226,19 @@ namespace DiscardOdds
 				sb.Append("      \"autoApplyMinMatches\": ").Append(p.AutoApplyMinMatches.ToString(CultureInfo.InvariantCulture)).Append(",\n");
 				sb.Append("      \"targets\": ");
 				WriteCards(sb, p.Targets, "      ");
+				WriteExclude(sb, p.OneDropExclude);
 				sb.Append("\n    }");
 			}
 			sb.Append(Presets.Count > 0 ? "\n  ]\n" : "]\n");
 			sb.Append("}\n");
 			return sb.ToString();
+		}
+
+		private static void WriteExclude(StringBuilder sb, List<TargetCard> cards)
+		{
+			if(cards == null) return;
+			sb.Append(",\n      \"oneDropExclude\": ");
+			WriteCards(sb, cards, "      ");
 		}
 
 		private static void WriteCards(StringBuilder sb, List<TargetCard> cards, string indent)

@@ -8,12 +8,11 @@ An HDT plugin that shows live odds for the cards **you** care about in **any dec
    - **Any card whose text draws cards** ("Draw a card", "Draw 2 cards", from HearthstoneJSON text via HearthDb) gets one line `Card name  hit% / miss%` for drawing at least one target. Conditional draws (Deathrattle, "If …", Combo, Choose One, "for each" …) are marked `≈`.
    - **Card-specific models** cover discard and special-draw cards: Wicked Whispers (lowest Cost), Expired Merchant and Chronoclaws (highest Cost), Soulfire and Darkshire Librarian (random), Ocular Occultist and Gemstone Hoarder (choose), Chamber of Viscidus (look at 3), Platysaur (draw, then discard it on death), The Soularium, Hand of Gul'dan, Cursed Catacombs (Discover from deck), Sketch Artist (Shadow spell). For example: `Wicked Whispers  50% / 50%  → Walking Dead / Party Fiend` (every tied card is listed; targets in bold).
    - **One line per card in hand, never two.** Any "When you play or discard this, draw N" card shows a single `(discard)` line: the chance its draws find a target when it is discarded (the played odds are the same draws and appear in the detail line).
-   - **Hand of Gul'dan is not on the main widget.** Its `Gul'dan (discard)  hit% / miss%` line appears only with *Show details*.
    - **Chronoclaws** shows no percentages, only the card(s) it would discard right now: `Chronoclaws → Soul Barrage` (orange). **Expired Merchant** does the same whenever the result is certain; on a tie between a target and a non-target it shows hit/miss.
-   - Cards where **you choose** the discard (Ocular Occultist, Gemstone Hoarder) **never appear on the widget**, in any mode, not even with *Show details* (you can already see whether a target is in hand). A Platysaur holding one of them doesn't name it either. One rule (`src/WidgetPolicy.cs`) decides this for every widget line. Up to v0.1.3 these lines still showed whenever *Show details* was on.
+   - **Never on the widget**, in any mode, not even with *Show details*: cards where **you choose** the discard (Ocular Occultist, Gemstone Hoarder; you can already see whether a target is in hand) and **Hand of Gul'dan** (removed completely in v0.1.5). A Platysaur holding one of them doesn't name it either. One rule (`src/WidgetPolicy.cs`) decides this for every widget line.
    - What a Platysaur on your board is holding (from the game's own link enchantment) and Duke of Below's current size (2/2 + 2/2 per card discarded this game).
 4. **Lethal check** on your turn: `Face damage: X vs Y health`, **bold bright yellow** (one size larger) when it's lethal, red when short (see [Lethal check](#lethal-check-your-turn)).
-5. **Opening one-drop odds** during the mulligan and your turn 1 only (see [One-drop odds](#one-drop-odds-mulligan--turn-1)).
+5. **Opener odds** during the mulligan and your turn 1 only: the chance of a turn-1 play (a 1-drop or, for the Discard preset, Cursed Catacombs), then `✓` or `Missed: X% chance` after your turn-1 draw (see [Opener odds](#opener-odds-mulligan--turn-1)).
 
 ### Reading the widget
 
@@ -31,7 +30,7 @@ One line per card, kept short so it doesn't cover your mana, hand or the opponen
 | `≈` | approximate model |
 | dim grey | details |
 
-The reasons behind each number (e.g. `lowest cost 3: …`, `8 targets in 24 cards, draw 3`) and the Hand of Gul'dan line are hidden by default; turn them on with *Plugins → Discard Odds → Show details*. Update status is never shown on the overlay, only as the first item of the plugin menu (e.g. `Up to date (v0.1.4)` or `Update v0.1.4 ready: restart HDT to finish`). An update only takes effect after HDT restarts.
+The reasons behind each number (e.g. `lowest cost 3: …`, `8 targets in 24 cards, draw 3`) are hidden by default: **Show details is off by default** and stays in the menu (*Plugins → Discard Odds → Show details*) if you want them. v0.1.5 switches it off once for settings saved by older versions; after that your choice is kept. Update status is never shown on the overlay, only as the first item of the plugin menu (e.g. `Up to date (v0.1.5)` or `Update v0.1.5 ready: restart HDT to finish`). An update only takes effect after HDT restarts.
 
 The cards left in your deck come from HDT's deck count. "Casts When Drawn" cards such as Shreds of Time are left out, because drawing one replaces itself; with *Show details* they get a separate note.
 
@@ -42,7 +41,7 @@ A **Discard Warlock preset** ships as an example in `targets.json` (Soul Barrage
 | Generic (any deck) | Still Discard Warlock-specific |
 |---|---|
 | Per-deck target lists, the targets window, `targets.json` | The card-specific models listed above (other discard/Discover/filtered-draw cards are not modelled) |
-| Hit/miss lines, one-drop odds (with per-deck exclusions) | The M0 probes and their logs (`[TEMP] [DUKE] [TIE] [MULL] [PLATY]`); `[ODDS]` and `[DECK]` work for any deck |
+| Hit/miss lines, opener odds (with per-deck exclusions and extra hits) | The M0 probes and their logs (`[TEMP] [DUKE] [TIE] [MULL] [PLATY]`); `[ODDS]` and `[DECK]` work for any deck |
 | Hit/miss for any plain "draw N cards" text | Type-filtered draws ("Draw a minion/spell") are skipped, except Sketch Artist |
 
 The plugin also **logs evidence** (M0 probes) so the math can be checked against the actual game:
@@ -83,7 +82,7 @@ These are the real results of the deck this plugin was built for: Ray's Wild Dis
 
 (The Discard Warlock mirror on its own: 16 games, 8-8, 50%.)
 
-**Turn-1 play:** with a play on turn 1 he won **63%** (123-72, 195 games). With no turn-1 play he won **21%** (3-11, 14 games; small sample). That's why the one-drop odds are on the widget.
+**Turn-1 play:** with a play on turn 1 he won **63%** (123-72, 195 games). With no turn-1 play he won **21%** (3-11, 14 games; small sample). That's why the opener odds are on the widget.
 
 **Game length** (HDT turn count): the deck wins fast or not at all.
 
@@ -156,7 +155,7 @@ HDT loads plugins from **`%AppData%\HearthstoneDeckTracker\Plugins`**. Don't use
    ```
    (Shortcut: `dotnet build -c Release -p:HdtDir="$hdt" -p:DeployToHdt=true` builds and copies in one step.)
 3. Start HDT, go to **Options → Tracker → Plugins**, select **"Discard Odds (M0 probe)"** and tick **Enabled**.
-4. HDT's main window now has a **Plugins → Discard Odds** menu with: *Choose target cards for this deck…*, *Reload targets.json*, *Unlock widget (drag to move)*, *Show widget*, *Show details (reasons, Hand of Gul'dan)*, *Compact mode (smaller widget)*, *Show lethal check (your turn)*, *Show one-drop odds (mulligan + turn 1)*, *Reset widget position*, *Write deck snapshot to log now*, *Open log folder*, and the update status (first item) and options (*Check for updates when HDT starts*, *Auto-update*, *Check for updates now*, *Open releases page*). The plugin's button in Options → Tracker → Plugins also opens the log folder.
+4. HDT's main window now has a **Plugins → Discard Odds** menu with: *Choose target cards for this deck…*, *Reload targets.json*, *Unlock widget (drag to move)*, *Show widget*, *Show details (reasons; off by default)*, *Compact mode (smaller widget)*, *Show lethal check (your turn)*, *Show one-drop odds (mulligan + turn 1)*, *Reset widget position*, *Write deck snapshot to log now*, *Open log folder*, and the update status (first item) and options (*Check for updates when HDT starts*, *Auto-update*, *Check for updates now*, *Open releases page*). The plugin's button in Options → Tracker → Plugins also opens the log folder.
 
 ## Target cards (targets.json)
 
@@ -166,7 +165,7 @@ HDT loads plugins from **`%AppData%\HearthstoneDeckTracker\Plugins`**. Don't use
 
 ```json
 {
-  "version": 1,
+  "version": 2,
   "decks": [
     {
       "deckId": "00000000-0000-0000-0000-000000000000",
@@ -179,7 +178,8 @@ HDT loads plugins from **`%AppData%\HearthstoneDeckTracker\Plugins`**. Don't use
       "name": "Discard Warlock payoffs",
       "autoApplyMinMatches": 3,
       "targets": [ { "id": "RLK_534", "name": "Soul Barrage" }, { "id": "RLK_532", "name": "Walking Dead" } ],
-      "oneDropExclude": [ { "id": "DMF_119", "name": "Wicked Whispers" } ]
+      "oneDropExclude": [ { "id": "DMF_119", "name": "Wicked Whispers" }, { "id": "TIME_026", "name": "Entropic Continuity" } ],
+      "openerExtraHits": [ { "id": "TLC_451", "name": "Cursed Catacombs" } ]
     }
   ]
 }
@@ -187,7 +187,10 @@ HDT loads plugins from **`%AppData%\HearthstoneDeckTracker\Plugins`**. Don't use
 - Targets are HearthstoneJSON card ids (hover a card in the window to see its id). `name` is only a label, and a plain id string works too.
 - A deck matches by `deckId` (HDT's deck id) first, then by `deckName`, so a re-imported deck still finds its list.
 - A preset with `autoApplyMinMatches` > 0 applies to decks without their own list that contain at least that many of its cards. Set it to 0 to make a preset manual-only.
-- `oneDropExclude` (on a preset or a deck) lists 1-Cost cards that should **not** count as a turn-1 play in the [one-drop odds](#one-drop-odds-mulligan--turn-1). The built-in Discard preset excludes Wicked Whispers (`DMF_119`), and an older `targets.json` gets that default automatically. A deck without its own `oneDropExclude` uses the one from the matching preset, even if the deck has its own target list. `"oneDropExclude": []` on a deck counts every 1-drop.
+- `oneDropExclude` (on a preset or a deck) lists 1-Cost cards that should **not** count as a turn-1 play in the [opener odds](#opener-odds-mulligan--turn-1). The built-in Discard preset excludes Wicked Whispers (`DMF_119`) and Entropic Continuity (`TIME_026`).
+- `openerExtraHits` (on a preset or a deck) lists other cards that **do** count as a turn-1 play, whatever their Cost. The built-in Discard preset adds Cursed Catacombs (`TLC_451`, 0 Cost). An excluded card never counts, even if it is also listed here.
+- A deck without its own `oneDropExclude` / `openerExtraHits` uses the matching preset's, even if the deck has its own target list. `[]` on a deck means "none" (every 1-drop counts / 1-drops only).
+- Older files are upgraded once: a `targets.json` from v0.1.4 or earlier (`"version": 1`) has the built-in Discard preset upgraded: Entropic Continuity is added to its excluded cards (next to Wicked Whispers) and Cursed Catacombs as an extra hit, is saved as `"version": 2`, and the previous file is kept as `targets.json.bak`. After that, your edits are left alone.
 
 **Moving the widget:** Plugins → Discard Odds → tick *Unlock widget*. The border turns gold. Drag it with the left mouse button over the Hearthstone window, then untick *Unlock widget*. The position is saved as a fraction of the overlay size, so it survives resolution changes. By default the widget starts lower-center-left of the board, just above your hand, so it does not cover either HDT deck list; once you drag it, your saved position is used instead. *Reset widget position* goes back to the default.
 
@@ -201,22 +204,23 @@ On your turn the widget adds a factual count of the damage that can reach the en
 - Not counted (first version): hero powers, buffs, cost reductions from playing cards, board-space limits, enemy secrets, armor gain or healing.
 - Opponent health includes armor; an Immune hero is never shown as lethal. Turn it off with *Show lethal check* or `ShowLethalCheck=False` in `settings.ini`.
 
-## One-drop odds (mulligan + turn 1)
+## Opener odds (mulligan + turn 1)
 
-Uses the 1-Cost cards in the active deck list, so it works for any deck, minus any cards in the deck's `oneDropExclude` list (default for the Discard preset: Wicked Whispers, because a turn-1 Whispers does nothing; see [Target cards](#target-cards-targetsjson)). Shown only until your turn 1 is over; turn it off with *Show one-drop odds* or `ShowOneDrop=False`.
+One line: the chance of having a **turn-1 play**. That is any 1-Cost card in the active deck list, minus the deck's `oneDropExclude` cards, plus its `openerExtraHits` cards (see [Target cards](#target-cards-targetsjson)), so it works for any deck. For the Discard preset that means 1-drops **or Cursed Catacombs**, **not** Wicked Whispers or Entropic Continuity (on turn 1 they do nothing). The label names what counts, e.g. `1-drop/Catacombs`. Shown only until your turn 1 is over; turn it off with *Show one-drop odds* or `ShowOneDrop=False`.
 
-- **Mulligan, no 1-drop in hand:** two lines, `1-drop by T1 · keep` (only the turn-1 draw) and `1-drop by T1 · toss N` (replace every card, then the turn-1 draw). Exact hypergeometric: the tossed cards are shuffled back only after the replacements are drawn, so they can't come back as their own replacements. Going first you keep 3 cards, on the coin 4 (the Coin is not a 1-drop).
-- **1-drop in hand:** `One-drop: in hand ✓`.
-- **After the mulligan, before the turn-1 draw:** `1-drop on T1 draw` hit/miss; if you tossed cards and still have none, a note `Chance of this (no 1-drop after full mulligan): X%`.
-- **Turn 1 after the draw:** `One-drop: in hand ✓`, or `One-drop: none (missed)` with the chance of that.
+- **Mulligan, none in hand:** two lines, `1-drop/Catacombs · keep` (only the turn-1 draw) and `1-drop/Catacombs · toss N` (replace every card, then the turn-1 draw). Exact hypergeometric: the tossed cards are shuffled back only after the replacements are drawn, so they can't come back as their own replacements. Going first you keep 3 cards, on the coin 4 (the Coin doesn't count).
+- **After the mulligan, before the turn-1 draw:** `1-drop/Catacombs T1` hit/miss for the draw.
+- **One in hand (mulligan or turn 1):** `1-drop/Catacombs: in hand ✓`. It stays ✓ for the rest of turn 1 even after you play it.
+- **Turn 1 after the draw, none in hand:** `Missed: 15% chance`, i.e. how likely that miss was, given your opening hand and what you tossed.
+- Both lines disappear once your turn 1 is over.
 
-For a 30-card list with 10 one-drops and no 1-drop in the opening hand: going first, keeping gives 37.0% and a full mulligan 85.4%; on the coin, 38.5% and 92.5%.
+For a 30-card list with 10 cards that count and none in the opening hand: going first, keeping gives 37.0% and a full mulligan 85.4%; on the coin, 38.5% and 92.5%.
 
 ## Updates
 
 When HDT starts, the plugin asks GitHub once for this repository's latest release (`https://api.github.com/repos/raydosborne/hdt-discard-odds/releases/latest`, HTTPS, no other site, no data about you or your games sent). It then compares that release's tag (e.g. `v0.2.0`) with the running version:
 
-- **Up to date:** the first Plugins-menu item reads `Up to date (v0.1.4)`. **Offline:** nothing changes; network errors are only written to the plugin log.
+- **Up to date:** the first Plugins-menu item reads `Up to date (v0.1.5)`. **Offline:** nothing changes; network errors are only written to the plugin log.
 - **Newer, Auto-update on (default):** it downloads the release's `DiscardOdds.dll` and `DiscardOdds.dll.sha256` and checks three things: the SHA-256 matches, the DLL really is `DiscardOdds` with the tag's version, and the download URLs belong to this repository's release assets. If all three pass, it replaces the copy in `%AppData%\HearthstoneDeckTracker\Plugins\…` and the first Plugins-menu item reads **"Update vX.Y.Z ready: restart HDT to finish"** (nothing is shown on the overlay). HDT locks the DLL it is running from (its local `Plugins` folder, not the AppData one), and on the next start it copies the newer AppData file over automatically. The previous DLL is kept as `DiscardOdds\update\DiscardOdds.previous.dll`. If any check fails, nothing is replaced and the notice says so.
 - **Newer, Auto-update off:** the first menu item reads "Update vX.Y.Z available (auto-update off): open release page"; click it to open the release page.
 
@@ -266,13 +270,13 @@ src/TargetsWindow.cs      "Choose target cards" window (code-only WPF)
 src/GameReader.cs         reads HDT state into snapshots / the counting rule
 src/Probes.cs             the M0 probes ([ODDS] [TEMP] [DUKE] [TIE] [DECK] [MULL] [PLATY])
 src/PayoffWidget.cs       overlay box, drag via User32.MouseInput
-src/WidgetPolicy.cs       which cards may appear on the widget (never / details only / main), one-drop exclusions (no HDT types; unit-tested)
+src/WidgetPolicy.cs       which cards may appear on the widget (never / main), opener hits (1-drops, exclusions, extra hits) (no HDT types; unit-tested)
 src/ProbeLog.cs           log files (not held open), tiny JSON writer, settings.ini
 src/LethalEngine.cs       lethal check: face-damage count, burn/Charge/weapon parsing from card text (no HDT types; unit-tested)
 src/UpdateLogic.cs        update rules: tag/version compare, release parsing, asset URL pinning, SHA-256 (no HDT types; unit-tested)
 src/Updater.cs            update check + download + verify + swap into HDT's AppData plugin folder
 .github/workflows/release.yml  builds the DLL on a version tag and publishes it + checksum as a GitHub Release
-tests/OddsEngine.Tests    `dotnet run -c Release`: math vs closed-form hypergeometric values, draw-text parsing, targets.json rules and I/O, widget card policy and one-drop exclusions, widget position rules, lethal check, update rules, log file sharing
+tests/OddsEngine.Tests    `dotnet run -c Release`: math vs closed-form hypergeometric values, draw-text parsing, targets.json rules and I/O, widget card policy, opener hits and targets.json upgrades, widget position rules, lethal check, update rules, log file sharing
 ```
 
 ## Releasing a new version (maintainer)

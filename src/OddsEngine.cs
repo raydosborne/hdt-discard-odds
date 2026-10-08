@@ -355,5 +355,11 @@ namespace DiscardOdds
 		/// shuffled back (deck = m cards, still k one-drops) and 1 card is drawn. t = 0 means "keep".
 		/// </summary>
 		public static double PNoneByTurn1(int m, int k, int t) => PNone(m, k, t) * PNone(m, k, 1);
+
+		/// <summary>
+		/// Same, when tossedHits of the t tossed cards were hits themselves: they can't come back as replacements, but they
+		/// are shuffled back before the turn-1 draw (deck = m cards with k + tossedHits hits).
+		/// </summary>
+		public static double PNoneByTurn1(int m, int k, int t, int tossedHits) => PNone(m, k, t) * PNone(m, k + Math.Max(0, tossedHits), 1);
 	}
 }

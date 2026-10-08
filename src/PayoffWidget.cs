@@ -55,8 +55,8 @@ namespace DiscardOdds
 	/// <summary>
 	/// Overlay widget (Compact mode default): the lethal line on your turn, one short line per odds card in hand, and the
 	/// opening one-drop line. No next-draw header or remaining-copies counts (HDT shows those) and no color legend (see the
-	/// README). Reasons and details-only lines (Hand of Gul'dan) appear only with "Show details"; cards WidgetPolicy marks
-	/// Never (Ocular Occultist, Gemstone Hoarder) are never drawn.
+	/// README). Reasons appear only with "Show details" (off by default); cards WidgetPolicy marks Never (Ocular Occultist,
+	/// Gemstone Hoarder, Hand of Gul'dan) are never drawn.
 	/// Built in code (no XAML) so the project compiles with the plain .NET SDK.
 	/// Drag: unlock via the Plugins menu. While unlocked, a low-level mouse hook (HDT's own User32.MouseInput,
 	/// the same approach as the DrawPool plugin) moves the widget; position is saved as fractions of the overlay size.

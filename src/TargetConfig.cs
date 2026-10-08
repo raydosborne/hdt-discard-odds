@@ -15,9 +15,10 @@ namespace DiscardOdds
 	// Presets are example lists; a preset with autoApplyMinMatches > 0 is used for any deck that has no list of its own
 	// but contains at least that many of the preset's cards.
 	//
-	// "oneDropExclude" (deck or preset) lists 1-cost cards that should NOT count as a turn-1 play in the one-drop odds
-	// (e.g. Wicked Whispers: a turn-1 Whispers does nothing). A deck without its own "oneDropExclude" inherits it from the
-	// first auto-matching preset, even when the deck has its own target list.
+	// "oneDropExclude" (deck or preset) lists 1-cost cards that should NOT count as a turn-1 play in the opener odds
+	// (e.g. Wicked Whispers, Entropic Continuity: on turn 1 they do nothing). "openerExtraHits" lists other cards that DO
+	// count (e.g. Cursed Catacombs, 0 Cost). A deck without its own list inherits it from the first auto-matching preset,
+	// even when the deck has its own target list.
 
 	public sealed class TargetCard
 	{
@@ -32,6 +33,8 @@ namespace DiscardOdds
 		public List<TargetCard> Targets = new List<TargetCard>();
 		/// <summary>null = not set (inherit from the matching preset); empty = exclude nothing.</summary>
 		public List<TargetCard> OneDropExclude;
+		/// <summary>null = not set (inherit from the matching preset); empty = 1-drops only.</summary>
+		public List<TargetCard> OpenerExtraHits;
 	}
 
 	public sealed class TargetPreset
@@ -42,6 +45,8 @@ namespace DiscardOdds
 		public List<TargetCard> Targets = new List<TargetCard>();
 		/// <summary>1-cost cards that don't count as a turn-1 play for decks using this preset. null = none.</summary>
 		public List<TargetCard> OneDropExclude;
+		/// <summary>Non-1-cost cards that also count as a turn-1 play (e.g. Cursed Catacombs). null = none.</summary>
+		public List<TargetCard> OpenerExtraHits;
 	}
 
 	public sealed class ResolvedTargets
@@ -52,6 +57,8 @@ namespace DiscardOdds
 		public string PresetName;
 		/// <summary>1-cost card ids that don't count as a 1-drop in the one-drop odds.</summary>
 		public HashSet<string> OneDropExclude = new HashSet<string>();
+		/// <summary>Other card ids that also count as a turn-1 play in the opener odds (e.g. Cursed Catacombs).</summary>
+		public HashSet<string> OpenerExtraHits = new HashSet<string>();
 
 		public string Describe() => Source == "deck" ? "your list for this deck"
 			: Source == "preset" ? $"preset '{PresetName}' (auto)"
@@ -60,12 +67,23 @@ namespace DiscardOdds
 
 	public sealed class TargetConfig
 	{
-		public const int CurrentVersion = 1;
+		/// <summary>2 = v0.1.5 (Entropic Continuity excluded, Cursed Catacombs counted for the Discard preset).</summary>
+		public const int CurrentVersion = 2;
 		public const string DiscardPresetName = "Discard Warlock payoffs";
 
-		/// <summary>Default one-drop exclusions for the built-in Discard preset: Wicked Whispers.</summary>
-		public static List<TargetCard> DefaultDiscardOneDropExclude() =>
-			new List<TargetCard> { new TargetCard { Id = "DMF_119", Name = "Wicked Whispers" } };
+		/// <summary>True when Parse upgraded an older file in memory (Load then writes it back, keeping a .bak).</summary>
+		public bool Migrated;
+
+		/// <summary>Default one-drop exclusions for the built-in Discard preset: Wicked Whispers, Entropic Continuity.</summary>
+		public static List<TargetCard> DefaultDiscardOneDropExclude() => new List<TargetCard>
+		{
+			new TargetCard { Id = "DMF_119", Name = "Wicked Whispers" },
+			new TargetCard { Id = "TIME_026", Name = "Entropic Continuity" },
+		};
+
+		/// <summary>Default extra opener hits for the built-in Discard preset: Cursed Catacombs (0 Cost).</summary>
+		public static List<TargetCard> DefaultDiscardOpenerExtraHits() =>
+			new List<TargetCard> { new TargetCard { Id = "TLC_451", Name = "Cursed Catacombs" } };
 		public List<DeckTargets> Decks = new List<DeckTargets>();
 		public List<TargetPreset> Presets = new List<TargetPreset>();
 
@@ -87,7 +105,8 @@ namespace DiscardOdds
 						new TargetCard { Id = "CATA_499", Name = "Disposable Acolytes" },
 						new TargetCard { Id = "KAR_205", Name = "Silverware Golem" },
 					},
-					OneDropExclude = DefaultDiscardOneDropExclude()
+					OneDropExclude = DefaultDiscardOneDropExclude(),
+					OpenerExtraHits = DefaultDiscardOpenerExtraHits()
 				}
 			}
 		};
@@ -125,7 +144,7 @@ namespace DiscardOdds
 		}
 
 		/// <summary>Target set for a deck: its own list if present (even if empty), else the first auto-matching preset.</summary>
-		/// <remarks>One-drop exclusions: the deck's own "oneDropExclude" if set, else the auto-matching preset's.</remarks>
+		/// <remarks>One-drop exclusions / extra opener hits: the deck's own "oneDropExclude" / "openerExtraHits" if set, else the auto-matching preset's.</remarks>
 		public ResolvedTargets Resolve(string deckId, string deckName, IEnumerable<string> deckCardIds)
 		{
 			var r = new ResolvedTargets();
@@ -134,6 +153,8 @@ namespace DiscardOdds
 			var preset = MatchPreset(inDeck);
 			if(own?.OneDropExclude != null) r.OneDropExclude = new HashSet<string>(own.OneDropExclude.Select(t => t.Id));
 			else if(preset?.OneDropExclude != null) r.OneDropExclude = new HashSet<string>(preset.OneDropExclude.Select(t => t.Id));
+			if(own?.OpenerExtraHits != null) r.OpenerExtraHits = new HashSet<string>(own.OpenerExtraHits.Select(t => t.Id));
+			else if(preset?.OpenerExtraHits != null) r.OpenerExtraHits = new HashSet<string>(preset.OpenerExtraHits.Select(t => t.Id));
 			if(own != null)
 			{
 				r.Source = "deck";
@@ -160,9 +181,10 @@ namespace DiscardOdds
 			var root = MiniJson.Parse(json) as Dictionary<string, object>
 			           ?? throw new FormatException("targets.json: top level must be an object");
 			var cfg = new TargetConfig();
+			var fileVersion = root.TryGetValue("version", out var ver) && ver is double vd ? (int)vd : 1;
 			if(root.TryGetValue("decks", out var decks) && decks is List<object> dl)
 				foreach(var o in dl.OfType<Dictionary<string, object>>())
-					cfg.Decks.Add(new DeckTargets { DeckId = Str(o, "deckId"), DeckName = Str(o, "deckName"), Targets = Cards(o), OneDropExclude = CardsOrNull(o, "oneDropExclude") });
+					cfg.Decks.Add(new DeckTargets { DeckId = Str(o, "deckId"), DeckName = Str(o, "deckName"), Targets = Cards(o), OneDropExclude = CardsOrNull(o, "oneDropExclude"), OpenerExtraHits = CardsOrNull(o, "openerExtraHits") });
 			if(root.TryGetValue("presets", out var presets) && presets is List<object> pl)
 				foreach(var o in pl.OfType<Dictionary<string, object>>())
 					cfg.Presets.Add(new TargetPreset
@@ -170,11 +192,23 @@ namespace DiscardOdds
 						Name = Str(o, "name") ?? "preset", Note = Str(o, "note"),
 						AutoApplyMinMatches = o.TryGetValue("autoApplyMinMatches", out var n) && n is double d ? (int)d : 0,
 						Targets = Cards(o),
-						OneDropExclude = CardsOrNull(o, "oneDropExclude")
+						OneDropExclude = CardsOrNull(o, "oneDropExclude"),
+						OpenerExtraHits = CardsOrNull(o, "openerExtraHits")
 					});
-			// Files written before v0.1.4 have no "oneDropExclude": give the built-in Discard preset its default (Wicked Whispers).
-			foreach(var p in cfg.Presets.Where(p => p.OneDropExclude == null && p.Name == DiscardPresetName))
-				p.OneDropExclude = DefaultDiscardOneDropExclude();
+			// Older files (version 1: v0.1.4 and earlier): the built-in Discard preset gets the v0.1.5 defaults. Missing
+			// exclusions (Wicked Whispers, Entropic Continuity) are added to any list it already has; Cursed Catacombs is
+			// added as an extra opener hit if the preset has no "openerExtraHits" yet. From version 2 on, the file is left as is.
+			if(fileVersion < CurrentVersion)
+			{
+				foreach(var p in cfg.Presets.Where(p => p.Name == DiscardPresetName))
+				{
+					if(p.OneDropExclude == null) p.OneDropExclude = new List<TargetCard>();
+					foreach(var d in DefaultDiscardOneDropExclude().Where(d => p.OneDropExclude.All(x => x.Id != d.Id)))
+						p.OneDropExclude.Add(d);
+					if(p.OpenerExtraHits == null) p.OpenerExtraHits = DefaultDiscardOpenerExtraHits();
+				}
+				cfg.Migrated = true;
+			}
 			return cfg;
 		}
 
@@ -199,7 +233,7 @@ namespace DiscardOdds
 		{
 			var sb = new StringBuilder();
 			sb.Append("{\n");
-			sb.Append("  \"_help\": \"Target cards per deck. Edit here or via HDT: Plugins > Discard Odds > Choose target cards. Targets are HearthstoneJSON card ids (e.g. RLK_534); 'name' is only a label. A deck matches by deckId first, then by deckName. Presets with autoApplyMinMatches > 0 are used for decks without their own list that contain at least that many preset cards. 'oneDropExclude' lists 1-cost cards that don't count as a turn-1 play in the one-drop odds (a deck without its own inherits the matching preset's).\",\n");
+			sb.Append("  \"_help\": \"Target cards per deck. Edit here or via HDT: Plugins > Discard Odds > Choose target cards. Targets are HearthstoneJSON card ids (e.g. RLK_534); 'name' is only a label. A deck matches by deckId first, then by deckName. Presets with autoApplyMinMatches > 0 are used for decks without their own list that contain at least that many preset cards. 'oneDropExclude' lists 1-cost cards that don't count as a turn-1 play in the opener odds; 'openerExtraHits' lists other cards that do (e.g. Cursed Catacombs). A deck without its own list inherits the matching preset's.\",\n");
 			sb.Append("  \"version\": ").Append(CurrentVersion).Append(",\n");
 			sb.Append("  \"decks\": [");
 			for(var i = 0; i < Decks.Count; i++)
@@ -211,7 +245,8 @@ namespace DiscardOdds
 				sb.Append("      \"deckName\": ").Append(Q(d.DeckName)).Append(",\n");
 				sb.Append("      \"targets\": ");
 				WriteCards(sb, d.Targets, "      ");
-				WriteExclude(sb, d.OneDropExclude);
+				WriteList(sb, "oneDropExclude", d.OneDropExclude);
+				WriteList(sb, "openerExtraHits", d.OpenerExtraHits);
 				sb.Append("\n    }");
 			}
 			sb.Append(Decks.Count > 0 ? "\n  ],\n" : "],\n");
@@ -226,7 +261,8 @@ namespace DiscardOdds
 				sb.Append("      \"autoApplyMinMatches\": ").Append(p.AutoApplyMinMatches.ToString(CultureInfo.InvariantCulture)).Append(",\n");
 				sb.Append("      \"targets\": ");
 				WriteCards(sb, p.Targets, "      ");
-				WriteExclude(sb, p.OneDropExclude);
+				WriteList(sb, "oneDropExclude", p.OneDropExclude);
+				WriteList(sb, "openerExtraHits", p.OpenerExtraHits);
 				sb.Append("\n    }");
 			}
 			sb.Append(Presets.Count > 0 ? "\n  ]\n" : "]\n");
@@ -234,10 +270,10 @@ namespace DiscardOdds
 			return sb.ToString();
 		}
 
-		private static void WriteExclude(StringBuilder sb, List<TargetCard> cards)
+		private static void WriteList(StringBuilder sb, string key, List<TargetCard> cards)
 		{
 			if(cards == null) return;
-			sb.Append(",\n      \"oneDropExclude\": ");
+			sb.Append(",\n      ").Append(Q(key)).Append(": ");
 			WriteCards(sb, cards, "      ");
 		}
 
@@ -273,7 +309,13 @@ namespace DiscardOdds
 					def.Save(path);
 					return def;
 				}
-				return Parse(File.ReadAllText(path, Encoding.UTF8));
+				var cfg = Parse(File.ReadAllText(path, Encoding.UTF8));
+				if(cfg.Migrated)
+				{
+					// Write the upgraded file once (previous one kept as targets.json.bak); a failed write changes nothing.
+					try { cfg.Save(path); cfg.Migrated = false; } catch { }
+				}
+				return cfg;
 			}
 			catch(Exception ex)
 			{

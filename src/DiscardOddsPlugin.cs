@@ -68,6 +68,7 @@ namespace DiscardOdds
 			{
 				if((DateTime.Now - _lastGameStart).TotalSeconds < 1) return; // guard against a doubled game-start event
 				_lastGameStart = DateTime.Now;
+				_openerHitLatched = false;
 				RefreshTargets(true); _probes.OnGameStart(); UpdateWidget(true);
 			}));
 			GameEvents.OnGameEnd.Add(() => On(() => _probes.OnGameEnd()));
@@ -266,12 +267,11 @@ namespace DiscardOdds
 				var c = new WidgetContent();
 				c.Rows.AddRange(oneDrop);
 				// One line per odds card in hand (one per entity, never two): "if you play it" hit / miss.
-				// WidgetPolicy decides placement for every line: Ocular Occultist / Gemstone Hoarder (you choose the discard) are
-				// never added, in any mode, not even with Show details (v0.1.3 still drew them when Show details was on).
-				// Hand of Gul'dan is details-only. Chronoclaws (and Expired Merchant when certain) show only "→ the card(s) it would discard".
+				// WidgetPolicy decides placement for every line: Ocular Occultist / Gemstone Hoarder (you choose the discard) and
+				// Hand of Gul'dan are never added, in any mode, not even with Show details.
+				// Chronoclaws (and Expired Merchant when certain) show only "→ the card(s) it would discard".
 				var lastHand = _probes.LastHand;
 				var state = GameReader.BuildOddsState(lastHand, Targets.Current);
-				var outletInHand = lastHand.Any(h => h.CardId != null && CardIds.OutletRule.ContainsKey(h.CardId) && h.CardId != CardIds.Platysaur);
 				var rowEntities = new HashSet<int>();
 				var rowCards = new HashSet<string>();
 				foreach(var o in OddsEngine.ForHand(state, OddsRule.CardRules))
@@ -279,15 +279,7 @@ namespace DiscardOdds
 					var place = WidgetPolicy.Place(o);
 					if(place == WidgetPlacement.Never) continue;
 					if(!rowEntities.Add(o.EntityId) || !rowCards.Add(o.CardId)) continue;
-					var detail = o.Detail;
-					if(o.CardId == "BT_300")
-					{
-						var hog = lastHand.FirstOrDefault(h => h.EntityId == o.EntityId);
-						detail += outletInHand ? " · a discard card is in hand" : " · no discard card in hand";
-						if(hog != null && hog.HasTempEnchant) detail += " · Temporary: burns at end of turn";
-					}
-					var name = o.CardId == "BT_300" ? "Gul'dan (discard)" : o.Name;
-					c.Rows.Add(new WidgetRow { CardId = o.CardId, Name = name, Hit = o.Hit, Approx = o.Approx, Detail = detail, DiscardRule = o.DiscardRule, DiscardNames = o.DiscardNames, DetailOnly = place == WidgetPlacement.DetailsOnly, NoOdds = o.NoOdds });
+					c.Rows.Add(new WidgetRow { CardId = o.CardId, Name = o.Name, Hit = o.Hit, Approx = o.Approx, Detail = o.Detail, DiscardRule = o.DiscardRule, DiscardNames = o.DiscardNames, DetailOnly = place == WidgetPlacement.DetailsOnly, NoOdds = o.NoOdds });
 				}
 				// Duke of Below: 2/2 + 2/2 per card discarded this game (EntitiesDiscardedFromHand, 4/4 in the live test).
 				var discards = GameReader.Player?.EntitiesDiscardedFromHand.Count ?? 0;
@@ -295,7 +287,7 @@ namespace DiscardOdds
 					c.Rows.Add(new WidgetRow { Name = "Duke of Below", Text = $"{2 + 2 * discards}/{2 + 2 * discards}", TextColor = WidgetColors.Text });
 				foreach(var l in _probes.LivePlatysaurLinks())
 				{
-					// A Platysaur holding a hidden card (e.g. Ocular Occultist) never names it; Hand of Gul'dan only with Show details.
+					// A Platysaur holding a hidden card (Ocular Occultist, Gemstone Hoarder, Hand of Gul'dan) never names it.
 					var place = WidgetPolicy.Place(null, l.drawnName);
 					if(place == WidgetPlacement.Never) continue;
 					c.Rows.Add(new WidgetRow { Name = "Platysaur", Text = $"holds {l.drawnName}{(l.payoff ? " (target)" : "")}", Bold = l.payoff, TextColor = WidgetColors.Text, DetailOnly = place == WidgetPlacement.DetailsOnly });

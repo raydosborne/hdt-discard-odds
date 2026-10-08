@@ -328,15 +328,16 @@ internal static class Program
 			var shown = WidgetPolicy.ForWidget(wpAll, details);
 			CheckTrue($"Ocular Occultist / Gemstone Hoarder never on the widget (Show details {(details ? "on" : "off")}), even with a target in hand",
 				shown.All(o => o.CardId != "CATA_490" && o.CardId != "CATA_897"));
-			CheckTrue($"Hand of Gul'dan only with Show details (details {(details ? "on" : "off")})", shown.Any(o => o.CardId == "BT_300") == details);
+			CheckTrue($"Hand of Gul'dan never on the widget (details {(details ? "on" : "off")})", shown.All(o => o.CardId != "BT_300"));
 			CheckTrue($"Wicked Whispers stays on the main widget (details {(details ? "on" : "off")})", shown.Any(o => o.CardId == "DMF_119"));
 		}
 		CheckTrue("Ocular with no target (0%) is still never shown", WidgetPolicy.Place(OddsEngine.Compute(ocu, noTarget, 41)) == WidgetPlacement.Never);
 		CheckTrue("hidden by name too (Platysaur 'holds Ocular Occultist' row, unknown id)", WidgetPolicy.Place(null, "Ocular Occultist") == WidgetPlacement.Never
 			&& WidgetPolicy.Place(null, "Gemstone Hoarder") == WidgetPlacement.Never);
-		CheckTrue("Hand of Gul'dan by name / label / story id -> details only", WidgetPolicy.Place(null, "Hand of Gul'dan") == WidgetPlacement.DetailsOnly
-			&& WidgetPolicy.Place(null, "Gul'dan (discard)") == WidgetPlacement.Main && WidgetPolicy.Place("BT_300", "Gul'dan (discard)") == WidgetPlacement.DetailsOnly
-			&& WidgetPolicy.Place("Story_09_HandofGuldan", null) == WidgetPlacement.DetailsOnly);
+		CheckTrue("Hand of Gul'dan by id / name / '(discard)' label / story id -> never (v0.1.5)", WidgetPolicy.Place(null, "Hand of Gul'dan") == WidgetPlacement.Never
+			&& WidgetPolicy.Place(null, "Hand of Gul'dan (discard)") == WidgetPlacement.Never && WidgetPolicy.Place("BT_300", "Gul'dan (discard)") == WidgetPlacement.Never
+			&& WidgetPolicy.Place("Story_09_HandofGuldan", null) == WidgetPlacement.Never);
+		CheckTrue("no card is details-only any more", WidgetPolicy.DetailsOnlyIds.Count == 0 && WidgetPolicy.DetailsOnlyNames.Count == 0);
 		CheckTrue("any choose-the-discard rule is hidden, whatever the card", WidgetPolicy.Place(new CardOdds { CardId = "ZZ_9", Name = "New Chooser", Kind = OddsKind.DiscardChoose }) == WidgetPlacement.Never);
 		CheckTrue("ordinary cards and labels stay on the main widget", WidgetPolicy.Place("RLK_534", "Soul Barrage") == WidgetPlacement.Main && WidgetPolicy.Place(null, "Duke of Below") == WidgetPlacement.Main);
 
@@ -345,27 +346,64 @@ internal static class Program
 		CheckTrue("one-drops without exclusions: all 1-cost cards", WidgetPolicy.OneDropIds(oneDeck, null).SetEquals(new[] { "DMF_119", "TLC_603", "CATA_493" }));
 		CheckTrue("one-drops with Wicked Whispers excluded", WidgetPolicy.OneDropIds(oneDeck, new HashSet<string> { "DMF_119" }).SetEquals(new[] { "TLC_603", "CATA_493" }));
 		var exCfg = TargetConfig.CreateDefault();
-		CheckTrue("default Discard preset excludes Wicked Whispers from one-drops", exCfg.Presets[0].OneDropExclude.Select(t => t.Id).SequenceEqual(new[] { "DMF_119" }));
-		CheckTrue("preset deck: one-drop excludes = DMF_119", exCfg.Resolve("g-1", "Discardo", discardDeck).OneDropExclude.SetEquals(new[] { "DMF_119" }));
+		CheckTrue("default Discard preset excludes Wicked Whispers + Entropic Continuity from one-drops", exCfg.Presets[0].OneDropExclude.Select(t => t.Id).SequenceEqual(new[] { "DMF_119", "TIME_026" }));
+		CheckTrue("default Discard preset counts Cursed Catacombs as an opener hit", exCfg.Presets[0].OpenerExtraHits.Select(t => t.Id).SequenceEqual(new[] { "TLC_451" }));
+		CheckTrue("preset deck: one-drop excludes = DMF_119 + TIME_026, extra hits = TLC_451", exCfg.Resolve("g-1", "Discardo", discardDeck).OneDropExclude.SetEquals(new[] { "DMF_119", "TIME_026" })
+			&& exCfg.Resolve("g-1", "Discardo", discardDeck).OpenerExtraHits.SetEquals(new[] { "TLC_451" }));
 		exCfg.SetDeckTargets("g-1", "Discardo", new[] { new TargetCard { Id = "RLK_534" } });
 		var exOwn = exCfg.Resolve("g-1", "Discardo", discardDeck);
-		CheckTrue("own target list without oneDropExclude still inherits the preset's (DMF_119)", exOwn.Source == "deck" && exOwn.OneDropExclude.SetEquals(new[] { "DMF_119" }));
+		CheckTrue("own target list without oneDropExclude / openerExtraHits still inherits the preset's", exOwn.Source == "deck" && exOwn.OneDropExclude.SetEquals(new[] { "DMF_119", "TIME_026" })
+			&& exOwn.OpenerExtraHits.SetEquals(new[] { "TLC_451" }));
 		exCfg.FindDeck("g-1", null).OneDropExclude = new List<TargetCard>();
 		CheckTrue("explicit empty oneDropExclude on the deck -> nothing excluded", exCfg.Resolve("g-1", "Discardo", discardDeck).OneDropExclude.Count == 0);
 		CheckTrue("unrelated deck: no one-drop exclusions", exCfg.Resolve("g-2", "Mage", new[] { "CS2_029" }).OneDropExclude.Count == 0);
 		var exRound = TargetConfig.Parse(exCfg.ToJson());
-		CheckTrue("oneDropExclude round-trips (preset list + explicit empty deck list)", exRound.Presets[0].OneDropExclude.Count == 1 && exRound.Presets[0].OneDropExclude[0].Id == "DMF_119"
+		CheckTrue("oneDropExclude / openerExtraHits round-trip (preset lists + explicit empty deck list), no re-migration", !exRound.Migrated
+			&& exRound.Presets[0].OneDropExclude.Select(t => t.Id).SequenceEqual(new[] { "DMF_119", "TIME_026" }) && exRound.Presets[0].OpenerExtraHits.Single().Id == "TLC_451"
 			&& exRound.Decks[0].OneDropExclude != null && exRound.Decks[0].OneDropExclude.Count == 0);
 		var legacy = TargetConfig.Parse("{ \"presets\": [ { \"name\": \"Discard Warlock payoffs\", \"autoApplyMinMatches\": 3, \"targets\": [\"RLK_534\", \"RLK_532\", \"BT_300\"] }, { \"name\": \"Other\", \"targets\": [] } ] }");
-		CheckTrue("pre-v0.1.4 targets.json: built-in Discard preset gets the Wicked Whispers default, others none",
-			legacy.Presets[0].OneDropExclude?.Count == 1 && legacy.Presets[0].OneDropExclude[0].Id == "DMF_119" && legacy.Presets[1].OneDropExclude == null);
+		CheckTrue("pre-v0.1.4 targets.json: built-in Discard preset gets the v0.1.5 defaults, others none",
+			legacy.Migrated && legacy.Presets[0].OneDropExclude.Select(t => t.Id).SequenceEqual(new[] { "DMF_119", "TIME_026" })
+			&& legacy.Presets[0].OpenerExtraHits.Single().Id == "TLC_451" && legacy.Presets[1].OneDropExclude == null && legacy.Presets[1].OpenerExtraHits == null);
+		// Ray's file as v0.1.4 saved it: version 1, preset with oneDropExclude [Wicked Whispers] only, own deck list.
+		var v014 = TargetConfig.Parse("{ \"version\": 1, \"decks\": [ { \"deckId\": \"d-1\", \"deckName\": \"Discardo\", \"targets\": [\"RLK_534\", \"RLK_532\", \"BT_300\"] } ], \"presets\": [ { \"name\": \"Discard Warlock payoffs\", \"autoApplyMinMatches\": 3, \"targets\": [\"RLK_534\", \"RLK_532\", \"BT_300\", \"CATA_499\", \"KAR_205\"], \"oneDropExclude\": [ { \"id\": \"DMF_119\", \"name\": \"Wicked Whispers\" } ] } ] }");
+		var v014r = v014.Resolve("d-1", "Discardo", discardDeck);
+		CheckTrue("v0.1.4 targets.json (Whispers only) picks up Entropic Continuity + Cursed Catacombs, own deck list kept",
+			v014.Migrated && v014r.Source == "deck" && v014r.OneDropExclude.SetEquals(new[] { "DMF_119", "TIME_026" }) && v014r.OpenerExtraHits.SetEquals(new[] { "TLC_451" })
+			&& v014.Presets[0].OneDropExclude.Count(t => t.Id == "DMF_119") == 1);
+		var v2Edited = TargetConfig.Parse("{ \"version\": 2, \"presets\": [ { \"name\": \"Discard Warlock payoffs\", \"targets\": [], \"oneDropExclude\": [\"DMF_119\"] } ] }");
+		CheckTrue("version-2 file: user edits are left alone (no re-adding)", !v2Edited.Migrated && v2Edited.Presets[0].OneDropExclude.Count == 1 && v2Edited.Presets[0].OpenerExtraHits == null);
+		var tmp2 = Path.Combine(Path.GetTempPath(), "discardodds_test_" + Guid.NewGuid().ToString("N"));
+		var path2 = Path.Combine(tmp2, "targets.json");
+		Directory.CreateDirectory(tmp2);
+		File.WriteAllText(path2, "{ \"version\": 1, \"decks\": [], \"presets\": [ { \"name\": \"Discard Warlock payoffs\", \"autoApplyMinMatches\": 3, \"targets\": [\"RLK_534\"], \"oneDropExclude\": [\"DMF_119\"] } ] }");
+		var loaded2 = TargetConfig.Load(path2, out var err4);
+		var onDisk2 = TargetConfig.Parse(File.ReadAllText(path2));
+		CheckTrue("Load writes the upgraded file once (version 2, .bak kept)", err4 == null && File.Exists(path2 + ".bak") && !onDisk2.Migrated
+			&& File.ReadAllText(path2).Contains("\"version\": 2") && onDisk2.Presets[0].OneDropExclude.Any(t => t.Id == "TIME_026") && loaded2.Presets[0].OpenerExtraHits.Count == 1);
+		try { Directory.Delete(tmp2, true); } catch { }
 		var handEx = TargetConfig.Parse("{ \"decks\": [ { \"deckName\": \"D\", \"targets\": [], \"oneDropExclude\": [\"DMF_119\", {\"id\": \"TLC_603\"}] } ] }");
 		CheckTrue("hand-written deck oneDropExclude (string ids and objects)", handEx.Resolve(null, "D", new string[0]).OneDropExclude.SetEquals(new[] { "DMF_119", "TLC_603" }));
 
-		// ---- settings: new toggles round-trip
-		var st2 = PluginSettings.Parse(new[] { "ShowDetails=True", "ShowOneDrop=False", "CompactMode=False" });
+		// ---- v0.1.5: opener line = 1-drops (minus exclusions) + extra hits (Cursed Catacombs)
+		var openDeck = new[] { ("DMF_119", 1), ("TIME_026", 1), ("TLC_603", 1), ("CATA_493", 1), ("TLC_451", 0), ("RLK_534", 4) };
+		var openEx = new HashSet<string> { "DMF_119", "TIME_026" };
+		CheckTrue("opener hits: 1-drops minus Whispers/Entropic, plus Catacombs", WidgetPolicy.OpenerHitIds(openDeck, openEx, new HashSet<string> { "TLC_451" }).SetEquals(new[] { "TLC_603", "CATA_493", "TLC_451" }));
+		CheckTrue("opener hits: no extras -> 1-drops only", WidgetPolicy.OpenerHitIds(openDeck, openEx, null).SetEquals(new[] { "TLC_603", "CATA_493" }));
+		CheckTrue("opener hits: an excluded card stays out even if listed as extra", !WidgetPolicy.OpenerHitIds(openDeck, openEx, new HashSet<string> { "DMF_119" }).Contains("DMF_119"));
+		CheckTrue("opener hits: an extra not in the deck adds nothing", WidgetPolicy.OpenerHitIds(new[] { ("TLC_603", 1) }, null, new HashSet<string> { "TLC_451" }).SetEquals(new[] { "TLC_603" }));
+		CheckTrue("opener label: '1-drop' / '1-drop/Catacombs'", WidgetPolicy.OpenerLabel(null) == "1-drop" && WidgetPolicy.OpenerLabel(new[] { "Cursed Catacombs" }) == "1-drop/Catacombs");
+		Check("miss chance with no hits tossed = old formula", OneDropOdds.PNoneByTurn1(27, 10, 3, 0), OneDropOdds.PNoneByTurn1(27, 10, 3));
+		// Tossed 1 hit + 2 others from 27 (9 hits left in deck): replacements miss (18/27·17/26·16/25), turn-1 draw misses with 10 hits back in 27.
+		Check("miss chance when a hit was tossed (it can be the turn-1 draw)", OneDropOdds.PNoneByTurn1(27, 9, 3, 1), (18.0 / 27 * 17 / 26 * 16 / 25) * (17.0 / 27));
+
+		// ---- settings: new toggles round-trip; Show details off by default and reset once for pre-v0.1.5 files
+		var st2 = PluginSettings.Parse(new[] { "SettingsVersion=2", "ShowDetails=True", "ShowOneDrop=False", "CompactMode=False" });
 		CheckTrue("ShowDetails / ShowOneDrop / CompactMode parse (defaults off / on / on)", st2.ShowDetails && !st2.ShowOneDrop && !st2.CompactMode
 			&& !PluginSettings.Parse(new string[0]).ShowDetails && PluginSettings.Parse(new string[0]).ShowOneDrop && PluginSettings.Parse(new string[0]).CompactMode);
+		var oldSt = PluginSettings.Parse(new[] { "ShowDetails=True", "CompactMode=True" });
+		CheckTrue("pre-v0.1.5 settings.ini with ShowDetails=True -> off once, then saved as version 2", !oldSt.ShowDetails && oldSt.SettingsVersion == PluginSettings.CurrentSettingsVersion
+			&& new PluginSettings().ShowDetails == false);
 
 		// ---- log files: not held open between flushes, nothing lost while a reader locks the file
 		var marker = "selftest-" + Guid.NewGuid().ToString("N");

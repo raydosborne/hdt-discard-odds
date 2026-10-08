@@ -12,10 +12,16 @@ namespace DiscardOdds
 {
 	public partial class DiscardOddsPlugin
 	{
+		/// <summary>True once a 1-drop / extra opener hit was in hand after the mulligan this game (so playing it on turn 1
+		/// keeps the ✓ line instead of turning into a miss). Reset at game start.</summary>
+		private bool _openerHitLatched;
+
 		/// <summary>
-		/// Opening one-drop line (1-cost cards in the active deck list): during the mulligan and on your turn 1 only.
-		/// Odds use OneDropOdds (tossed cards can't come back as their own replacements).
-		/// 1-cost cards in the deck's "oneDropExclude" list (default for the Discard preset: Wicked Whispers) don't count.
+		/// Opening line (mulligan + your turn 1 only): the chance of having a turn-1 play, i.e. a 1-Cost card that isn't in
+		/// the deck's "oneDropExclude" list (Discard preset: Wicked Whispers, Entropic Continuity) or one of its
+		/// "openerExtraHits" (Discard preset: Cursed Catacombs). Odds use OneDropOdds (tossed cards can't come back as their
+		/// own replacements). After the turn-1 draw: "✓" if you have one, else "Missed: X% chance" (how likely that miss was,
+		/// given your mulligan). Hidden once your turn 1 is over.
 		/// </summary>
 		private void AddOneDropRows(List<WidgetRow> rows)
 		{
@@ -25,51 +31,58 @@ namespace DiscardOdds
 				var game = HdtApi.Core.Game;
 				var player = game?.Player;
 				if(player == null) return;
-				var ones = WidgetPolicy.OneDropIds(_deckCards.Select(d => (d.Id, d.Cost)), Targets.Resolved?.OneDropExclude);
-				var kList = _deckCards.Where(d => ones.Contains(d.Id)).Sum(d => d.Copies);
+				var resolved = Targets.Resolved;
+				var hits = WidgetPolicy.OpenerHitIds(_deckCards.Select(d => (d.Id, d.Cost)), resolved?.OneDropExclude, resolved?.OpenerExtraHits);
+				var kList = _deckCards.Where(d => hits.Contains(d.Id)).Sum(d => d.Copies);
 				if(kList == 0) return;
+				var label = WidgetPolicy.OpenerLabel(_deckCards.Where(d => hits.Contains(d.Id) && d.Cost != 1).Select(d => d.Name));
+				var what = label == "1-drop" ? "1-drops" : label.Replace("/", " / ") + " cards";
 				var hand = _probes.LastHand.Where(h => !h.IsCoin).ToList();
 				if(hand.Count == 0) return;
-				if(hand.Any(h => ones.Contains(h.CardId)))
-				{
-					rows.Add(new WidgetRow { Name = "One-drop:", NameIsLabel = true, Text = "in hand ✓", Bold = true, TextColor = WidgetColors.Hit });
-					return;
-				}
 				bool mulliganDone;
 				try { mulliganDone = game.IsMulliganDone; } catch { mulliganDone = true; }
+				var hasHit = hand.Any(h => hits.Contains(h.CardId));
+				if(mulliganDone && hasHit) _openerHitLatched = true;
+				if(hasHit || _openerHitLatched)
+				{
+					rows.Add(new WidgetRow { Name = label + ":", NameIsLabel = true, Text = "in hand ✓", Bold = true, TextColor = WidgetColors.Hit });
+					return;
+				}
 				var m = player.DeckCount;
 				if(!mulliganDone)
 				{
 					var k = Math.Min(kList, m);
 					var t = hand.Count;
-					var keepName = _settings.CompactMode ? "1-drop · keep" : "1-drop by T1 · keep";
-					var tossName = _settings.CompactMode ? $"1-drop · toss {t}" : $"1-drop by T1 · toss {t}";
-					rows.Add(new WidgetRow { Name = keepName, NameIsLabel = true, Hit = 1 - OneDropOdds.PNoneByTurn1(m, k, 0), Detail = $"{k} one-drops in the {m} cards left; only the turn-1 draw" });
-					rows.Add(new WidgetRow { Name = tossName, NameIsLabel = true, Hit = 1 - OneDropOdds.PNoneByTurn1(m, k, t), Detail = $"{t} replacements from the {m} cards left (tossed cards can't come back), then the turn-1 draw" });
+					var by = _settings.CompactMode ? "" : " by T1";
+					rows.Add(new WidgetRow { Name = $"{label}{by} · keep", NameIsLabel = true, Hit = 1 - OneDropOdds.PNoneByTurn1(m, k, 0), Detail = $"{k} {what} in the {m} cards left; only the turn-1 draw" });
+					rows.Add(new WidgetRow { Name = $"{label}{by} · toss {t}", NameIsLabel = true, Hit = 1 - OneDropOdds.PNoneByTurn1(m, k, t), Detail = $"{t} replacements from the {m} cards left (tossed cards can't come back), then the turn-1 draw" });
 					return;
 				}
-				var open = _probes.OpeningHand?.Where(h => !h.IsCoin).ToList();
-				var after = _probes.HandAfterMulligan;
-				var tossed = open != null && after != null ? open.Count(h => after.All(a => a.EntityId != h.EntityId)) : 0;
-				var openHadOne = open != null && open.Any(h => ones.Contains(h.CardId));
-				var m0 = _probes.DeckCountAtOpening;
-				var k0 = Math.Min(kList, m0);
-				var label = open != null && tossed == open.Count ? "full mulligan" : $"tossing {tossed}";
-				var rare = tossed > 0 && !openHadOne && m0 > 0;
 				if(!_probes.Turn1DrawSeen)
 				{
 					var rem = GameReader.RemainingDeck();
-					var k = Math.Min(m, ones.Sum(id => rem.TryGetValue(id, out var v) ? v : 0));
-					rows.Add(new WidgetRow { Name = _settings.CompactMode ? "1-drop T1" : "1-drop on T1 draw", NameIsLabel = true, Hit = m > 0 ? (double)k / m : 0, Detail = $"{k} one-drops in the {m} cards left" });
-					if(rare)
-						rows.Add(new WidgetRow { Text = $"Chance of this (no 1-drop after {label}): {OddsEngine.Pct(OneDropOdds.PNone(m0, k0, tossed))}", Small = true, TextColor = WidgetColors.Note });
+					var k = Math.Min(m, hits.Sum(id => rem.TryGetValue(id, out var v) ? v : 0));
+					rows.Add(new WidgetRow { Name = _settings.CompactMode ? $"{label} T1" : $"{label} on T1 draw", NameIsLabel = true, Hit = m > 0 ? (double)k / m : 0, Detail = $"{k} {what} in the {m} cards left" });
+					return;
 				}
-				else
+				// Turn 1, after the draw, none in hand: how likely this miss was, from the opening hand and your mulligan.
+				var open = _probes.OpeningHand?.Where(h => !h.IsCoin).ToList();
+				var after = _probes.HandAfterMulligan;
+				var m0 = _probes.DeckCountAtOpening;
+				string chance = null;
+				if(open != null && after != null && m0 > 0)
 				{
-					rows.Add(new WidgetRow { Name = "One-drop:", NameIsLabel = true, Text = "none (missed)", Bold = true, TextColor = WidgetColors.Miss });
-					if(rare)
-						rows.Add(new WidgetRow { Text = $"Chance of this (no 1-drop by turn 1 after {label}): {OddsEngine.Pct(OneDropOdds.PNoneByTurn1(m0, k0, tossed))}", Small = true, TextColor = WidgetColors.Note });
+					var tossedCards = open.Where(h => after.All(a => a.EntityId != h.EntityId)).ToList();
+					var k0 = Math.Max(0, kList - open.Count(h => hits.Contains(h.CardId)));
+					var p = OneDropOdds.PNoneByTurn1(m0, k0, tossedCards.Count, tossedCards.Count(h => hits.Contains(h.CardId)));
+					chance = OddsEngine.Pct(p);
 				}
+				rows.Add(new WidgetRow
+				{
+					Text = chance != null ? $"Missed: {chance} chance" : "Missed",
+					Bold = true, TextColor = WidgetColors.Miss,
+					Detail = $"no {what.TrimEnd('s')} in hand after the turn-1 draw"
+				});
 			}
 			catch(Exception ex)
 			{
@@ -134,7 +147,7 @@ namespace DiscardOdds
 			_updateItem.Click += (s, e) => OpenUrl(_updater?.Latest?.HtmlUrl ?? UpdateLogic.ReleasesPage);
 			var lethal = new MenuItem { Header = "Show lethal check (your turn)", IsCheckable = true, IsChecked = _settings?.ShowLethalCheck ?? true };
 			lethal.Click += (s, e) => { if(_settings == null) return; _settings.ShowLethalCheck = lethal.IsChecked; _settings.Save(); UpdateWidget(true); };
-			var details = new MenuItem { Header = "Show details (reasons, Hand of Gul'dan)", IsCheckable = true, IsChecked = _settings?.ShowDetails ?? false };
+			var details = new MenuItem { Header = "Show details (reasons; off by default)", IsCheckable = true, IsChecked = _settings?.ShowDetails ?? false };
 			details.Click += (s, e) => { if(_settings == null) return; _settings.ShowDetails = details.IsChecked; _settings.Save(); UpdateWidget(true); };
 			var compact = new MenuItem { Header = "Compact mode (smaller widget)", IsCheckable = true, IsChecked = _settings?.CompactMode ?? true };
 			compact.Click += (s, e) => { if(_settings == null) return; _settings.CompactMode = compact.IsChecked; _settings.Save(); UpdateWidget(true); };

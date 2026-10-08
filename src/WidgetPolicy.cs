@@ -13,28 +13,27 @@ namespace DiscardOdds
 	/// </summary>
 	public static class WidgetPolicy
 	{
-		/// <summary>You pick the discarded card yourself: never on the widget, in any mode, not even with Show details.</summary>
+		/// <summary>
+		/// Never on the widget, in any mode, not even with Show details: cards where you pick the discard yourself
+		/// (Ocular Occultist, Gemstone Hoarder), and Hand of Gul'dan (removed completely in v0.1.5).
+		/// </summary>
 		public static readonly HashSet<string> NeverIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
 		{
 			"CATA_490", // Ocular Occultist
 			"CATA_897", // Gemstone Hoarder
+			"BT_300",   // Hand of Gul'dan
+			"Story_09_HandofGuldan",
 		};
 
 		public static readonly HashSet<string> NeverNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
 		{
-			"Ocular Occultist", "Gemstone Hoarder",
+			"Ocular Occultist", "Gemstone Hoarder", "Hand of Gul'dan",
 		};
 
-		/// <summary>Shown only with Show details: Hand of Gul'dan (its "draw 3 when discarded" line).</summary>
-		public static readonly HashSet<string> DetailsOnlyIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-		{
-			"BT_300", "Story_09_HandofGuldan",
-		};
+		/// <summary>Cards shown only with Show details. Empty since v0.1.5 (Hand of Gul'dan moved to Never).</summary>
+		public static readonly HashSet<string> DetailsOnlyIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-		public static readonly HashSet<string> DetailsOnlyNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-		{
-			"Hand of Gul'dan",
-		};
+		public static readonly HashSet<string> DetailsOnlyNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
 		/// <summary>Strips a trailing " (…)" label such as "Hand of Gul'dan (discard)".</summary>
 		private static string BaseName(string name)
@@ -79,8 +78,29 @@ namespace DiscardOdds
 
 		/// <summary>Ids of the deck's 1-cost cards that count as a turn-1 play (excluded ids removed).</summary>
 		public static HashSet<string> OneDropIds(IEnumerable<(string id, int cost)> deck, ISet<string> excluded) =>
+			OpenerHitIds(deck, excluded, null);
+
+		/// <summary>
+		/// Ids of the deck's cards that count as a turn-1 play for the opener line: every 1-cost card plus the extra hits
+		/// (e.g. Cursed Catacombs) that are in the deck, minus the excluded ids (exclusion wins).
+		/// </summary>
+		public static HashSet<string> OpenerHitIds(IEnumerable<(string id, int cost)> deck, ISet<string> excluded, ISet<string> extraHits) =>
 			new HashSet<string>((deck ?? Enumerable.Empty<(string id, int cost)>())
-				.Where(c => c.cost == 1 && c.id != null && (excluded == null || !excluded.Contains(c.id)))
+				.Where(c => c.id != null && (c.cost == 1 || (extraHits != null && extraHits.Contains(c.id)))
+				            && (excluded == null || !excluded.Contains(c.id)))
 				.Select(c => c.id));
+
+		/// <summary>
+		/// Short label for the opener line: "1-drop", or "1-drop/Catacombs" when extra hits are in the deck
+		/// (last word of each extra card's name).
+		/// </summary>
+		public static string OpenerLabel(IEnumerable<string> extraNamesInDeck)
+		{
+			var shorts = (extraNamesInDeck ?? Enumerable.Empty<string>())
+				.Where(n => !string.IsNullOrWhiteSpace(n))
+				.Select(n => n.Trim().Split(' ').Last())
+				.Distinct().ToList();
+			return shorts.Count == 0 ? "1-drop" : "1-drop/" + string.Join("/", shorts);
+		}
 	}
 }

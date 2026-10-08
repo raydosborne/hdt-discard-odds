@@ -233,9 +233,12 @@ namespace DiscardOdds
 		public bool CheckForUpdates = true;        // on HDT start, ask this repo's GitHub Releases for the latest version
 		public bool AutoUpdate = true;             // ...and if newer, download + verify it; it's swapped in on the next HDT restart
 		public bool ShowLethalCheck = true;        // "Face damage: X vs Y health" line on your turn
-		public bool ShowDetails = false;           // dim second line with the reason behind each number, plus the color legend
+		public bool ShowDetails = false;           // dim second line with the reason behind each number (default OFF)
 		public bool ShowOneDrop = true;            // opening one-drop odds (mulligan + your turn 1 only)
 		public bool CompactMode = true;            // smaller font, tighter padding, short header (default ON)
+		/// <summary>2 = v0.1.5. Files from older versions get ShowDetails reset to off once (it is still in the menu).</summary>
+		public const int CurrentSettingsVersion = 2;
+		public int SettingsVersion = CurrentSettingsVersion;
 
 		private static string PathOnDisk => Path.Combine(ProbeLog.RootDir, "settings.ini");
 
@@ -261,6 +264,7 @@ namespace DiscardOdds
 			{
 				double? left = null, top = null;
 				bool? saved = null;
+				var fileVersion = 1;
 				foreach(var raw in lines)
 				{
 					var line = raw.Trim();
@@ -283,8 +287,12 @@ namespace DiscardOdds
 						case nameof(ShowDetails): s.ShowDetails = ParseB(v, s.ShowDetails); break;
 						case nameof(ShowOneDrop): s.ShowOneDrop = ParseB(v, s.ShowOneDrop); break;
 						case nameof(CompactMode): s.CompactMode = ParseB(v, s.CompactMode); break;
+						case nameof(SettingsVersion): fileVersion = int.TryParse(v, NumberStyles.Integer, CultureInfo.InvariantCulture, out var fv) ? fv : 1; break;
 					}
 				}
+				// Show details is off by default; a file from v0.1.4 or earlier gets it switched off once.
+				if(fileVersion < CurrentSettingsVersion) s.ShowDetails = false;
+				s.SettingsVersion = CurrentSettingsVersion;
 				// A user-saved position takes precedence over the default. Legacy files (no WidgetPositionSaved key)
 				// count as saved only if the stored position differs from the old built-in default.
 				var isSaved = saved ?? (left.HasValue && top.HasValue
@@ -311,6 +319,7 @@ namespace DiscardOdds
 				File.WriteAllLines(PathOnDisk, new[]
 				{
 					"# Discard Odds settings. Fractions are relative to the HDT overlay size.",
+					$"{nameof(SettingsVersion)}={SettingsVersion}",
 					$"{nameof(WidgetLeftFraction)}={WidgetLeftFraction.ToString("0.####", CultureInfo.InvariantCulture)}",
 					$"{nameof(WidgetTopFraction)}={WidgetTopFraction.ToString("0.####", CultureInfo.InvariantCulture)}",
 					$"{nameof(WidgetPositionSaved)}={WidgetPositionSaved}",

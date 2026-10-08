@@ -81,6 +81,24 @@ namespace DiscardOdds
 		// odds prediction vs outcome
 		private readonly List<Prediction> _predictions = new List<Prediction>();
 		public List<HandCard> LastHand => _lastHand;
+		public int Turn => _turn;
+
+		/// <summary>Last resolved Soularium (3 draws known): shown on the widget for the rest of that turn.</summary>
+		public sealed class SoulariumResult
+		{
+			public int Turn;
+			public int Payoffs;
+			public int Draws;
+			public double P;
+			public string Text;
+		}
+		public SoulariumResult LastSoulariumResult { get; private set; }
+
+		// luck score (log only): card-odds predictions and natural turn draws vs their predicted chances
+		private LuckTally _luckCards = new LuckTally();
+		private LuckTally _luckTurnDraws = new LuckTally();
+		private double? _turnDrawP;
+		private DateTime _turnDrawAt;
 
 		private class Prediction
 		{
@@ -90,6 +108,7 @@ namespace DiscardOdds
 			public int Turn;
 			public readonly List<string> Drawn = new List<string>();
 			public bool Resolved;
+			public double[] Dist; // DrawK: P(exactly i targets among the K draws), from the deck at play
 			public bool IsDraw => Rule.Kind == OddsKind.DrawK || Rule.Kind == OddsKind.DrawShadowSpell || Rule.Kind == OddsKind.DrawThenDiscardIt;
 			public int DrawsExpected => Rule.Kind == OddsKind.DrawK ? Rule.K : 1;
 		}
@@ -163,6 +182,10 @@ namespace DiscardOdds
 			_turn1DrawSeen = false;
 			_platys.Clear();
 			_predictions.Clear();
+			LastSoulariumResult = null;
+			_luckCards = new LuckTally();
+			_luckTurnDraws = new LuckTally();
+			_turnDrawP = null;
 
 			var deck = HdtDeckList.Instance.ActiveDeck;
 			var game = HdtApi.Core.Game;
@@ -185,6 +208,19 @@ namespace DiscardOdds
 			LogDuke("game_end", force: true);
 			foreach(var pt in _platys.Where(x => !x.Resolved))
 				LogPlatyOutcome(pt, "game_end_unresolved", null);
+			try
+			{
+				var luck = DrawMath.LuckLine(_luckCards, _luckTurnDraws);
+				ProbeLog.Line("LUCK", $"game #{ProbeLog.GameIndex}: {luck}");
+				ProbeLog.Record("luck", new Dictionary<string, object>
+				{
+					["events_cards"] = _luckCards.Events, ["events_turn_draws"] = _luckTurnDraws.Events,
+					["hits_cards"] = _luckCards.Actual, ["expected_cards"] = _luckCards.Expected,
+					["hits_turn_draws"] = _luckTurnDraws.Actual, ["expected_turn_draws"] = _luckTurnDraws.Expected,
+					["line"] = luck
+				});
+			}
+			catch(Exception ex) { ProbeLog.Line("ERR", "luck: " + ex.Message); }
 			ProbeLog.Line("GAME", $"===== game #{ProbeLog.GameIndex} end | discard events seen={_discardEventsThisGame}");
 			ProbeLog.Record("game_end", new Dictionary<string, object> { ["discard_events"] = _discardEventsThisGame });
 		}
@@ -196,6 +232,17 @@ namespace DiscardOdds
 			if(_myTurn) _myTurnsStarted++;
 			else if(_myTurnsStarted > 0) _openingOver = true;
 			ProbeLog.Line("TURN", $"turn {_turn} start: {who} | hand={Fmt(_lastHand)}");
+			// Luck score: the chance this turn's draw is a target, read at turn start (before the draw).
+			_turnDrawP = null;
+			if(_myTurn && Targets.Current.Count > 0)
+			{
+				try
+				{
+					var (n, m, _) = GameReader.PayoffCount(Targets.Current);
+					if(m > 0 && GameReader.DeckSettled()) { _turnDrawP = Math.Min(1.0, (double)n / m); _turnDrawAt = DateTime.Now; }
+				}
+				catch { }
+			}
 			if(_myTurn)
 				DumpDeck("own_turn_start", HdtConfigVerbose);
 			LogDuke("turn_start", force: false);
@@ -338,7 +385,14 @@ namespace DiscardOdds
 		{
 			if(_myTurn && _myTurnsStarted == 1) _turn1DrawSeen = true;
 			LinkPlatyDraw(card);
-			FeedDrawPrediction(card);
+			var fed = FeedDrawPrediction(card);
+			if(!fed && _turnDrawP.HasValue && _myTurn && card != null && (DateTime.Now - _turnDrawAt).TotalSeconds < 10)
+			{
+				var hit = Targets.Contains(card.Id);
+				_luckTurnDraws.AddBinary(_turnDrawP.Value, hit);
+				ProbeLog.Line("LUCK", $"turn {_turn} draw: {card.Name} {(hit ? "target" : "not a target")} (predicted {OddsEngine.Pct(_turnDrawP.Value)})");
+				_turnDrawP = null;
+			}
 			// N/M are not read here: HDT's PlayerCardList still holds the card just drawn (DeckCount has already dropped).
 			_pendingDrawLogs.Add((card?.Name, card?.Id, DateTime.Now));
 		}
@@ -614,6 +668,11 @@ namespace DiscardOdds
 				var state = GameReader.BuildOddsState(_lastHand, Targets.Current);
 				var odds = OddsEngine.Compute(rule, state, played?.EntityId ?? 0);
 				var pred = new Prediction { Rule = rule, Odds = odds, At = now, Turn = _turn };
+				if(rule.Kind == OddsKind.DrawK)
+				{
+					var n = state.Deck.Where(kv => state.Group.Contains(kv.Key)).Sum(kv => kv.Value);
+					pred.Dist = DrawMath.HyperDist(state.DeckCount, n, rule.K);
+				}
 				_predictions.Add(pred);
 				ProbeLog.Line("ODDS", $"PLAY {odds}");
 				ProbeLog.Record("odds_prediction", new Dictionary<string, object>
@@ -629,14 +688,16 @@ namespace DiscardOdds
 			}
 		}
 
-		private void FeedDrawPrediction(Card card)
+		/// <summary>Feeds a draw to a pending draw-card prediction; true if one took it.</summary>
+		private bool FeedDrawPrediction(Card card)
 		{
 			var pred = _predictions.LastOrDefault(p => !p.Resolved && p.IsDraw && p.Turn == _turn && (DateTime.Now - p.At).TotalSeconds < OutletWindowSeconds);
-			if(pred == null || card == null) return;
-			if(CardIds.IsCastsWhenDrawn(card.Id)) { ProbeLog.Line("ODDS", $"  {card.Name} cast when drawn: not counted as one of the {pred.DrawsExpected} draws"); return; }
+			if(pred == null || card == null) return false;
+			if(CardIds.IsCastsWhenDrawn(card.Id)) { ProbeLog.Line("ODDS", $"  {card.Name} cast when drawn: not counted as one of the {pred.DrawsExpected} draws"); return true; }
 			pred.Drawn.Add(card.Id);
 			if(pred.Drawn.Count >= pred.DrawsExpected)
 				ResolvePrediction(pred, pred.Drawn.Any(id => Targets.Contains(id)), "drew " + string.Join(", ", pred.Drawn.Select(id => Name(id) ?? id)), pred.Drawn);
+			return true;
 		}
 
 		private void ResolveDiscardPrediction(string cause, List<HandCard> before, HandCard discarded)
@@ -706,6 +767,25 @@ namespace DiscardOdds
 				["predicted_hit"] = pred.Odds.Hit, ["hit"] = hit, ["approx"] = pred.Odds.Approx, ["what"] = what,
 				["cards"] = cards?.ToList(), ["turn"] = pred.Turn
 			});
+			try
+			{
+				var complete = pred.IsDraw && pred.Dist != null && pred.Drawn.Count >= pred.DrawsExpected;
+				if(complete)
+				{
+					var got = pred.Drawn.Count(id => Targets.Contains(id));
+					_luckCards.AddCount(pred.Dist, got);
+					if(pred.Rule.CardId == CardIds.Soularium)
+					{
+						var p = got < pred.Dist.Length ? pred.Dist[got] : 0;
+						var text = DrawMath.ResultText(got, pred.DrawsExpected, p);
+						LastSoulariumResult = new SoulariumResult { Turn = pred.Turn, Payoffs = got, Draws = pred.DrawsExpected, P = p, Text = text };
+						ProbeLog.Line("ODDS", $"SOULARIUM result: {text} | P(0..{pred.Dist.Length - 1}) = {string.Join(" / ", pred.Dist.Select(OddsEngine.Pct))} | {what}");
+					}
+				}
+				else if(!pred.Odds.NoOdds && !pred.Odds.ByChoice)
+					_luckCards.AddBinary(pred.Odds.Hit, hit);
+			}
+			catch(Exception ex) { ProbeLog.Line("ERR", "luck/result: " + ex.Message); }
 		}
 
 		// ------------------------------------------------------------------ PLATYSAUR

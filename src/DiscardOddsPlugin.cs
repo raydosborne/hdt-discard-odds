@@ -261,10 +261,12 @@ namespace DiscardOdds
 					Show("No target cards set for this deck", "Plugins → Discard Odds → Choose target cards…", oneDrop);
 					return;
 				}
-				var (_, m, known) = GameReader.PayoffCount(Targets.Current);
+				var (payoffsLeft, m, known) = GameReader.PayoffCount(Targets.Current);
 				var unknown = m - known;
-				// No "Next X% · n/m" header and no "targets left n/m" counts: HDT's own deck list already shows remaining copies.
 				var c = new WidgetContent();
+				// "5 payoffs left": tiny header (toggle "Payoffs left").
+				if(_settings.ShowPayoffsLeft)
+					c.Header = new WidgetRow { Text = DrawMath.PayoffsLeftText(payoffsLeft), Small = true, TextColor = WidgetColors.Light };
 				c.Rows.AddRange(oneDrop);
 				// One line per odds card in hand (one per entity, never two): "if you play it" hit / miss.
 				// WidgetPolicy decides placement for every line: Ocular Occultist / Gemstone Hoarder (you choose the discard) and
@@ -272,6 +274,18 @@ namespace DiscardOdds
 				// Chronoclaws (and Expired Merchant when certain) show only "→ the card(s) it would discard".
 				var lastHand = _probes.LastHand;
 				var state = GameReader.BuildOddsState(lastHand, Targets.Current);
+				var nextMana = GameReader.NextTurnMana();
+				// "Next draw: Payoff 33% · Playable 60%" (playable = cost ≤ next turn's mana).
+				if(_settings.ShowNextDraw && state.DeckCount > 0)
+				{
+					var nd = DrawMath.NextDraw(state.Deck, state.DeckCount, Targets.Current, GameReader.BaseCost, nextMana);
+					c.Rows.Add(new WidgetRow { Segments = DrawMath.NextDrawSegments(nd), Detail = DrawMath.NextDrawDetail(nd) });
+				}
+				// "Soularium → 2 payoffs: 30% chance": the last Soularium's 3 draws, for the rest of that turn.
+				var sr = _probes.LastSoulariumResult;
+				if(_settings.ShowSoulariumResult && sr != null && sr.Turn == _probes.Turn)
+					c.Rows.Add(new WidgetRow { Name = "Soularium", Text = "→ " + sr.Text, TextColor = sr.Payoffs > 0 ? WidgetColors.Hit : WidgetColors.Miss, Bold = true });
+				var payoffsInDeck = state.Deck.Where(kv => state.Group.Contains(kv.Key)).Sum(kv => kv.Value);
 				var rowEntities = new HashSet<int>();
 				var rowCards = new HashSet<string>();
 				foreach(var o in OddsEngine.ForHand(state, OddsRule.CardRules))
@@ -279,6 +293,11 @@ namespace DiscardOdds
 					var place = WidgetPolicy.Place(o);
 					if(place == WidgetPlacement.Never) continue;
 					if(!rowEntities.Add(o.EntityId) || !rowCards.Add(o.CardId)) continue;
+					if(o.CardId == CardIds.Soularium)
+					{
+						AddSoulariumRows(c.Rows, o, state, payoffsInDeck, nextMana);
+						continue;
+					}
 					c.Rows.Add(new WidgetRow { CardId = o.CardId, Name = o.Name, Hit = o.Hit, Approx = o.Approx, Detail = o.Detail, DiscardRule = o.DiscardRule, DiscardNames = o.DiscardNames, DetailOnly = place == WidgetPlacement.DetailsOnly, NoOdds = o.NoOdds });
 				}
 				// Duke of Below: 2/2 + 2/2 per card discarded this game (EntitiesDiscardedFromHand, 4/4 in the live test).
@@ -298,6 +317,28 @@ namespace DiscardOdds
 				if(unknown > 0)
 					c.Rows.Add(new WidgetRow { Text = $"{unknown} unknown card(s) in deck counted as misses", Small = true, DetailOnly = true, TextColor = WidgetColors.Dim });
 				_widget.SetContent(c);
+			}
+
+			// Soularium in hand: "Soularium 1+ 76% · 2+ 31% · 3/3 4% · whiff 24%" (toggle off = the old hit/miss row),
+			// then "Risk @2: Payoff 1+ 76% · Waste 1+ 45% · avg 0.6 wasted" (mana left after paying for it).
+			void AddSoulariumRows(List<WidgetRow> rows, CardOdds o, OddsState state, int n, int nextMana)
+			{
+				if(_settings.ShowSoulariumOdds)
+				{
+					var so = DrawMath.Soularium(state.DeckCount, n);
+					rows.Add(new WidgetRow { CardId = o.CardId, Name = "Soularium", Segments = DrawMath.SoulariumSegments(so),
+						Detail = $"{so.N} payoffs in {so.M} cards, {so.Draws} draws: P(0/1/2/3) = {string.Join(" / ", so.Dist.Select(OddsEngine.Pct))}" });
+				}
+				else
+					rows.Add(new WidgetRow { CardId = o.CardId, Name = o.Name, Hit = o.Hit, Approx = o.Approx, Detail = o.Detail });
+				if(_settings.ShowSoulariumRisk)
+				{
+					var cost = state.Hand.FirstOrDefault(h => h.EntityId == o.EntityId)?.Cost ?? GameReader.BaseCost(o.CardId) ?? 0;
+					// Your turn: mana available now. Opponent's turn: your next turn's mana (when you could play it).
+					var manaNow = GameReader.IsMyTurn() ? GameReader.ManaNow() : nextMana;
+					var w = DrawMath.Waste(state.Deck, state.DeckCount, state.Group, GameReader.BaseCost, manaNow - cost);
+					rows.Add(new WidgetRow { CardId = o.CardId, Name = null, Segments = DrawMath.RiskSegments(w), Detail = DrawMath.RiskDetail(w, cost, manaNow) });
+				}
 			}
 
 			try

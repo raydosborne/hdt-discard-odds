@@ -48,6 +48,20 @@ namespace DiscardOdds
 		public int OppArmor;
 		public bool OppImmune;
 		public int EnemyTaunts;
+		public int SpellDamage;        // friendly Spell Damage now (used to parse deck cards for the next-draw estimate)
+		public bool EnemyBoardEmpty;
+	}
+
+	/// <summary>"Lethal next draw ~X%": share of the deck whose draw would make next turn lethal (estimate).</summary>
+	public sealed class NextDrawLethalResult
+	{
+		public int Hits, DeckCount, NextMana;
+		public double P;
+		public bool AlreadyLethal;  // next turn is lethal with no draw (board + hand as they are)
+		public List<string> Cards = new List<string>(); // "Soulfire ×2"
+		public List<(string text, SegKind kind)> Segments = new List<(string, SegKind)>();
+		public string Line;
+		public string Detail;
 	}
 
 	public sealed class LethalResult
@@ -104,6 +118,63 @@ namespace DiscardOdds
 			if(s.AttacksThisTurn >= AttacksPerTurn(s)) return "already attacked";
 			return null;
 		}
+
+		/// <summary>
+		/// Attacks a character on the board now gets on your next turn (no Charge/just-played limits then).
+		/// stillFrozen: frozen and still frozen on your next turn (frozen during the opponent's turn).
+		/// </summary>
+		public static int AttacksNextTurn(AttackState s, bool stillFrozen)
+		{
+			if(s.CantAttack || s.Dormant || s.TitanLocked || stillFrozen) return 0;
+			return AttacksPerTurn(s);
+		}
+
+		/// <summary>
+		/// Estimate: the chance next turn's draw makes it lethal. next = next turn's board/hero/hand/mana (board and hand
+		/// assumed to stay as they are); deck = parsed deck cards with copies (null / ≈ cards are left out: ambiguous);
+		/// deckCount = cards in deck (unknown cards count as no damage).
+		/// </summary>
+		public static NextDrawLethalResult NextDrawLethal(LethalInput next, IEnumerable<(LethalCard card, int copies)> deck, int deckCount)
+		{
+			var r = new NextDrawLethalResult { DeckCount = Math.Max(0, deckCount), NextMana = next.Mana };
+			var baseR = Compute(next);
+			if(baseR.Lethal)
+			{
+				r.AlreadyLethal = true;
+				r.P = 1;
+			}
+			else if(!next.OppImmune && baseR.Target > 0 && r.DeckCount > 0)
+			{
+				foreach(var (card, copies) in deck ?? Enumerable.Empty<(LethalCard, int)>())
+				{
+					if(card == null || card.Approx || card.Damage <= 0 || copies <= 0 || card.Cost > next.Mana) continue;
+					var x = CloneWithCard(next, card);
+					if(!Compute(x).Lethal) continue;
+					r.Hits += copies;
+					r.Cards.Add($"{card.Name} ×{copies}");
+				}
+				r.Hits = Math.Min(r.Hits, r.DeckCount);
+				r.P = (double)r.Hits / r.DeckCount;
+			}
+			var pct = OddsEngine.Pct(Math.Max(0, Math.Min(1, r.P)));
+			if(r.AlreadyLethal)
+				r.Segments = new List<(string, SegKind)> { ("Lethal next turn ", SegKind.Label), ("~" + pct, SegKind.Hit), (" (no draw needed)", SegKind.Dim) };
+			else
+				r.Segments = new List<(string, SegKind)> { ("Lethal next draw ", SegKind.Label), ("~" + pct, SegKind.Hit) };
+			r.Line = string.Concat(r.Segments.Select(g => g.text));
+			r.Detail = (r.AlreadyLethal
+				           ? $"next turn {next.Mana} mana: {baseR.Total} vs {baseR.Target} without a draw"
+				           : $"{r.Hits} of {r.DeckCount} cards" + (r.Cards.Count > 0 ? ": " + string.Join(", ", r.Cards) : "") + $" · next turn {next.Mana} mana")
+			           + " · estimate: board, hand and enemy stay as now; uncertain cards left out";
+			return r;
+		}
+
+		private static LethalInput CloneWithCard(LethalInput x, LethalCard card) => new LethalInput
+		{
+			NotCounted = x.NotCounted, Minions = x.Minions, HeroAttack = x.HeroAttack, HeroAttacksLeft = x.HeroAttacksLeft,
+			Hand = new List<LethalCard>(x.Hand) { card }, Mana = x.Mana, OppHealth = x.OppHealth, OppArmor = x.OppArmor,
+			OppImmune = x.OppImmune, EnemyTaunts = x.EnemyTaunts, SpellDamage = x.SpellDamage, EnemyBoardEmpty = x.EnemyBoardEmpty
+		};
 
 		public static string Clean(string text) => Space.Replace(Tags.Replace(text ?? "", " ").Replace('\n', ' '), " ").Trim();
 

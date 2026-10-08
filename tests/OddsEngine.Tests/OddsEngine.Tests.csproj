@@ -14,5 +14,6 @@
     <Compile Include="..\..\src\UpdateLogic.cs" Link="UpdateLogic.cs" />
     <Compile Include="..\..\src\LethalEngine.cs" Link="LethalEngine.cs" />
     <Compile Include="..\..\src\WidgetPolicy.cs" Link="WidgetPolicy.cs" />
+    <Compile Include="..\..\src\DrawMath.cs" Link="DrawMath.cs" />
   </ItemGroup>
 </Project>

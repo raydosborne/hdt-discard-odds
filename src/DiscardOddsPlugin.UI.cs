@@ -104,8 +104,18 @@ namespace DiscardOdds
 				var input = GameReader.BuildLethalInput(_probes.LastHand);
 				if(input == null) { _widget.SetLethal(null, null, false); return; }
 				var r = LethalEngine.Compute(input);
-				_widget.SetLethal(r.Line, r.Detail, r.Lethal);
-				var log = $"{r.Line} | {r.Detail} | mana {input.Mana} | attackers [{string.Join(", ", input.Minions.Select(a => $"{a.Name} {a.Attack}x{a.Attacks}"))}] hero {input.HeroAttack}x{input.HeroAttacksLeft} | hand [{string.Join(", ", input.Hand.Select(h => $"{h.Name} c{h.Cost} {h.Damage}{(h.IsWeapon ? "w" : "")}"))}]";
+				// "Lethal next draw ~X%": only under a short check (not lethal, enemy not Immune), as an estimate.
+				NextDrawLethalResult nd = null;
+				if(_settings.ShowLethalNextDraw && !r.Lethal && !input.OppImmune && r.Target > 0)
+				{
+					var next = GameReader.BuildNextTurnLethalInput(input);
+					var deckCount = Math.Max(0, (GameReader.Player?.DeckCount ?? 0) - GameReader.CastsWhenDrawnInDeck());
+					if(next != null && deckCount > 0)
+						nd = LethalEngine.NextDrawLethal(next, GameReader.DeckLethalCards(input.SpellDamage, input.EnemyBoardEmpty), deckCount);
+				}
+				_widget.SetLethal(r.Line, r.Detail, r.Lethal, nd?.Segments, nd?.Detail);
+				var log = $"{r.Line} | {r.Detail} | mana {input.Mana} | attackers [{string.Join(", ", input.Minions.Select(a => $"{a.Name} {a.Attack}x{a.Attacks}"))}] hero {input.HeroAttack}x{input.HeroAttacksLeft} | hand [{string.Join(", ", input.Hand.Select(h => $"{h.Name} c{h.Cost} {h.Damage}{(h.IsWeapon ? "w" : "")}"))}]"
+				          + (nd != null ? $" || {nd.Line} | {nd.Detail}" : "");
 				if(log != _lastLethalLog) { _lastLethalLog = log; ProbeLog.Line("LETHAL", log); }
 			}
 			catch(Exception ex)
@@ -159,6 +169,21 @@ namespace DiscardOdds
 			auto.Click += (s, e) => { if(_settings == null) return; _settings.AutoUpdate = auto.IsChecked; _settings.Save(); };
 			var checkNow = new MenuItem { Header = "Check for updates now" };
 			checkNow.Click += (s, e) => _updater?.CheckInBackground(_settings?.AutoUpdate ?? true, true);
+			// Every optional widget line has its own toggle here (all on by default).
+			var lines = new MenuItem { Header = "Widget lines" };
+			MenuItem Toggle(string header, Func<PluginSettings, bool> get, Action<PluginSettings, bool> set)
+			{
+				var item = new MenuItem { Header = header, IsCheckable = true, IsChecked = _settings == null || get(_settings) };
+				item.Click += (s, e) => { if(_settings == null) return; set(_settings, item.IsChecked); _settings.Save(); UpdateWidget(true); };
+				lines.Items.Add(item);
+				return item;
+			}
+			Toggle("Payoffs left (\"5 payoffs left\")", x => x.ShowPayoffsLeft, (x, v) => x.ShowPayoffsLeft = v);
+			Toggle("Next draw (payoff / playable)", x => x.ShowNextDraw, (x, v) => x.ShowNextDraw = v);
+			Toggle("Soularium odds (1+ / 2+ / 3/3 / whiff)", x => x.ShowSoulariumOdds, (x, v) => x.ShowSoulariumOdds = v);
+			Toggle("Soularium risk (payoff / waste)", x => x.ShowSoulariumRisk, (x, v) => x.ShowSoulariumRisk = v);
+			Toggle("Soularium result (that turn)", x => x.ShowSoulariumResult, (x, v) => x.ShowSoulariumResult = v);
+			Toggle("Lethal next draw (estimate)", x => x.ShowLethalNextDraw, (x, v) => x.ShowLethalNextDraw = v);
 			var releases = new MenuItem { Header = "Open releases page" };
 			releases.Click += (s, e) => OpenUrl(UpdateLogic.ReleasesPage);
 			root.Items.Add(_updateItem);
@@ -171,6 +196,7 @@ namespace DiscardOdds
 			root.Items.Add(compact);
 			root.Items.Add(lethal);
 			root.Items.Add(oneDrop);
+			root.Items.Add(lines);
 			root.Items.Add(reset);
 			root.Items.Add(new Separator());
 			root.Items.Add(dump);

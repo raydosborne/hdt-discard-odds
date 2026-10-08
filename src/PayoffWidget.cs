@@ -28,6 +28,7 @@ namespace DiscardOdds
 		public bool DetailOnly;        // only shown with "Show details"
 		public bool NoOdds;            // no hit/miss %, only "→ card(s) it would discard" (Chronoclaws, certain Expired Merchant)
 		public string Suffix;          // small dim text after the numbers on the same line (e.g. the targets list)
+		public List<(string text, SegKind kind)> Segments; // multi-colored line (after Name): labels light, hit % bold green, miss % red
 	}
 
 	public sealed class WidgetContent
@@ -147,7 +148,13 @@ namespace DiscardOdds
 			var detailSize = compact ? 9 : 10.5;
 			var hitBump = compact ? 0.5 : 1.0;
 			var tb = new TextBlock { TextWrapping = TextWrapping.Wrap, MaxWidth = MaxW, FontSize = size, LineHeight = compact ? size + 2 : double.NaN };
-			if(r.Text != null)
+			if(r.Segments != null)
+			{
+				if(r.Name != null)
+					tb.Inlines.Add(new Run(r.Name + " ") { Foreground = r.NameIsLabel ? WidgetColors.Text : WidgetColors.CardName, FontWeight = FontWeights.SemiBold });
+				AddSegments(tb.Inlines, r.Segments, size, hitBump);
+			}
+			else if(r.Text != null)
 			{
 				if(r.Name != null)
 					tb.Inlines.Add(new Run(r.Name + " ") { Foreground = r.NameIsLabel ? WidgetColors.Text : WidgetColors.CardName, FontWeight = FontWeights.SemiBold, FontSize = r.Small ? small : size });
@@ -189,6 +196,23 @@ namespace DiscardOdds
 			return tb;
 		}
 
+		private static void AddSegments(InlineCollection inlines, IEnumerable<(string text, SegKind kind)> segs, double size, double hitBump)
+		{
+			foreach(var (text, kind) in segs)
+			{
+				var run = new Run(text) { FontSize = size };
+				switch(kind)
+				{
+					case SegKind.Hit: run.Foreground = WidgetColors.Hit; run.FontWeight = FontWeights.Bold; run.FontSize = size + hitBump; break;
+					case SegKind.Miss: run.Foreground = WidgetColors.Miss; run.FontWeight = FontWeights.SemiBold; break;
+					case SegKind.Dim: run.Foreground = WidgetColors.Dim; run.FontWeight = FontWeights.Normal; break;
+					case SegKind.Name: run.Foreground = WidgetColors.CardName; run.FontWeight = FontWeights.SemiBold; break;
+					default: run.Foreground = WidgetColors.Light; run.FontWeight = FontWeights.Normal; break;
+				}
+				inlines.Add(run);
+			}
+		}
+
 		public void Attach()
 		{
 			var canvas = HdtApi.Core.OverlayCanvas;
@@ -223,7 +247,7 @@ namespace DiscardOdds
 		}
 
 		/// <summary>Lethal-check line (null hides it): bold bright yellow (one size up) when lethal, red when short. Detail only with "Show details".</summary>
-		public void SetLethal(string line, string detail, bool lethal)
+		public void SetLethal(string line, string detail, bool lethal, List<(string text, SegKind kind)> next = null, string nextDetail = null)
 		{
 			if(line == null) { _lethal.Visibility = Visibility.Collapsed; return; }
 			_lethal.Inlines.Clear();
@@ -235,6 +259,15 @@ namespace DiscardOdds
 			});
 			if(_settings.ShowDetails && !string.IsNullOrEmpty(detail))
 				_lethal.Inlines.Add(new Run("\n " + detail) { FontSize = _settings.CompactMode ? 9 : 10.5, FontWeight = FontWeights.Normal, Foreground = WidgetColors.Dim });
+			if(next != null && next.Count > 0)
+			{
+				// "Lethal next draw ~12%" on its own line under a short lethal check (an estimate, row-sized).
+				var size = _settings.CompactMode ? 11 : 12.5;
+				_lethal.Inlines.Add(new Run("\n") { FontSize = size });
+				AddSegments(_lethal.Inlines, next, size, _settings.CompactMode ? 0.5 : 1.0);
+				if(_settings.ShowDetails && !string.IsNullOrEmpty(nextDetail))
+					_lethal.Inlines.Add(new Run("\n " + nextDetail) { FontSize = _settings.CompactMode ? 9 : 10.5, FontWeight = FontWeights.Normal, Foreground = WidgetColors.Dim });
+			}
 			_lethal.Visibility = Visibility.Visible;
 		}
 

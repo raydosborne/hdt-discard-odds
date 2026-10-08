@@ -441,6 +441,8 @@ namespace DiscardOdds
 			var pe = game.PlayerEntity;
 			x.Mana = Math.Max(0, pe.GetTag(GameTag.RESOURCES) + pe.GetTag(GameTag.TEMP_RESOURCES) - pe.GetTag(GameTag.RESOURCES_USED) - pe.GetTag(GameTag.OVERLOAD_LOCKED));
 			var spellDamage = mine.Where(e => e.IsMinion || e.IsHero || e.IsWeapon).Sum(e => e.GetTag(GameTag.SPELLPOWER)); // not enchantments (they can carry the tag too)
+			x.SpellDamage = spellDamage;
+			x.EnemyBoardEmpty = enemyMinions.Count == 0;
 			foreach(var h in hand)
 			{
 				try
@@ -453,6 +455,79 @@ namespace DiscardOdds
 				catch { }
 			}
 			return x;
+		}
+
+		public static bool IsMyTurn() => HdtApi.Core.Game?.PlayerEntity?.IsCurrentPlayer == true;
+
+		/// <summary>Mana available right now (same formula as the lethal check).</summary>
+		public static int ManaNow()
+		{
+			var pe = HdtApi.Core.Game?.PlayerEntity;
+			if(pe == null) return 0;
+			return Math.Max(0, pe.GetTag(GameTag.RESOURCES) + pe.GetTag(GameTag.TEMP_RESOURCES) - pe.GetTag(GameTag.RESOURCES_USED) - pe.GetTag(GameTag.OVERLOAD_LOCKED));
+		}
+
+		/// <summary>Your next turn's mana: max mana + 1 (capped at 10) minus Overload owed.</summary>
+		public static int NextTurnMana()
+		{
+			var pe = HdtApi.Core.Game?.PlayerEntity;
+			if(pe == null) return 0;
+			return DrawMath.NextTurnMana(pe.GetTag(GameTag.RESOURCES), Tag(pe, "OVERLOAD_OWED"));
+		}
+
+		/// <summary>Printed cost (deck cards: HDT doesn't know discounts on cards still in the deck).</summary>
+		public static int? BaseCost(string cardId)
+		{
+			try { return cardId != null && HearthDb.Cards.All.TryGetValue(cardId, out var c) ? c.Cost : (int?)null; }
+			catch { return null; }
+		}
+
+		/// <summary>
+		/// Next turn's lethal input from the board as it is now: every minion with attack gets its full attacks (frozen ones
+		/// only drop out when it's the opponent's turn now), the hero gets the equipped weapon's attack, hand = now.
+		/// </summary>
+		public static LethalInput BuildNextTurnLethalInput(LethalInput now)
+		{
+			var game = HdtApi.Core.Game;
+			var player = game?.Player;
+			if(player == null || now == null) return null;
+			var myTurn = IsMyTurn();
+			var mine = player.Board.ToList();
+			var x = new LethalInput
+			{
+				Hand = now.Hand, OppHealth = now.OppHealth, OppArmor = now.OppArmor, OppImmune = now.OppImmune,
+				EnemyTaunts = now.EnemyTaunts, SpellDamage = now.SpellDamage, EnemyBoardEmpty = now.EnemyBoardEmpty,
+				Mana = NextTurnMana()
+			};
+			foreach(var e in mine.Where(e => e.IsMinion && e.Attack > 0))
+			{
+				var st = AttackStateOf(e);
+				var n = LethalEngine.AttacksNextTurn(st, st.Frozen && !myTurn);
+				var name = SafeName(e) ?? e.CardId;
+				if(n > 0) x.Minions.Add(new LethalAttacker { Name = name, Attack = e.Attack, Attacks = n });
+				else x.NotCounted.Add(name);
+			}
+			var weapon = mine.FirstOrDefault(e => e.IsWeapon);
+			x.HeroAttack = weapon != null ? Math.Max(0, weapon.Attack) : 0;
+			x.HeroAttacksLeft = weapon != null && weapon.GetTag(GameTag.WINDFURY) > 0 ? 2 : 1; // 1 also lets a drawn weapon swing
+			return x;
+		}
+
+		/// <summary>Remaining deck as lethal cards (printed cost/attack, current Spell Damage) with copies; null = no face damage.</summary>
+		public static List<(LethalCard card, int copies)> DeckLethalCards(int spellDamage, bool enemyBoardEmpty)
+		{
+			var list = new List<(LethalCard, int)>();
+			foreach(var kv in RemainingDeck())
+			{
+				try
+				{
+					if(kv.Value <= 0 || !HearthDb.Cards.All.TryGetValue(kv.Key, out var c)) continue;
+					var card = LethalEngine.ParseCard(c.Name ?? kv.Key, c.Type.ToString(), c.Cost, CardText(kv.Key), c.Attack, spellDamage, enemyBoardEmpty);
+					if(card != null) list.Add((card, kv.Value));
+				}
+				catch { }
+			}
+			return list;
 		}
 
 		/// <summary>Builds the pure-math input from live HDT state.</summary>

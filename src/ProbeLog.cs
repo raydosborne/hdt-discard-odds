@@ -236,6 +236,13 @@ namespace DiscardOdds
 		public bool ShowDetails = false;           // dim second line with the reason behind each number (default OFF)
 		public bool ShowOneDrop = true;            // opening one-drop odds (mulligan + your turn 1 only)
 		public bool CompactMode = true;            // smaller font, tighter padding, short header (default ON)
+		// v0.1.6 lines, each with its own menu toggle (all on by default)
+		public bool ShowSoulariumOdds = true;      // "Soularium 1+ 76% · 2+ 31% · 3/3 4% · whiff 24%"
+		public bool ShowSoulariumRisk = true;      // "Risk @2: Payoff 1+ 76% · Waste 1+ 45% · avg 0.6 wasted"
+		public bool ShowSoulariumResult = true;    // "Soularium → 2 payoffs: 30% chance" (rest of that turn)
+		public bool ShowNextDraw = true;           // "Next draw: Payoff 33% · Playable 60%"
+		public bool ShowPayoffsLeft = true;        // "5 payoffs left"
+		public bool ShowLethalNextDraw = true;     // "Lethal next draw ~12%" under a short lethal check
 		/// <summary>2 = v0.1.5. Files from older versions get ShowDetails reset to off once (it is still in the menu).</summary>
 		public const int CurrentSettingsVersion = 2;
 		public int SettingsVersion = CurrentSettingsVersion;
@@ -287,6 +294,12 @@ namespace DiscardOdds
 						case nameof(ShowDetails): s.ShowDetails = ParseB(v, s.ShowDetails); break;
 						case nameof(ShowOneDrop): s.ShowOneDrop = ParseB(v, s.ShowOneDrop); break;
 						case nameof(CompactMode): s.CompactMode = ParseB(v, s.CompactMode); break;
+						case nameof(ShowSoulariumOdds): s.ShowSoulariumOdds = ParseB(v, s.ShowSoulariumOdds); break;
+						case nameof(ShowSoulariumRisk): s.ShowSoulariumRisk = ParseB(v, s.ShowSoulariumRisk); break;
+						case nameof(ShowSoulariumResult): s.ShowSoulariumResult = ParseB(v, s.ShowSoulariumResult); break;
+						case nameof(ShowNextDraw): s.ShowNextDraw = ParseB(v, s.ShowNextDraw); break;
+						case nameof(ShowPayoffsLeft): s.ShowPayoffsLeft = ParseB(v, s.ShowPayoffsLeft); break;
+						case nameof(ShowLethalNextDraw): s.ShowLethalNextDraw = ParseB(v, s.ShowLethalNextDraw); break;
 						case nameof(SettingsVersion): fileVersion = int.TryParse(v, NumberStyles.Integer, CultureInfo.InvariantCulture, out var fv) ? fv : 1; break;
 					}
 				}
@@ -330,6 +343,12 @@ namespace DiscardOdds
 					$"{nameof(ShowDetails)}={ShowDetails}",
 					$"{nameof(ShowOneDrop)}={ShowOneDrop}",
 					$"{nameof(CompactMode)}={CompactMode}",
+					$"{nameof(ShowSoulariumOdds)}={ShowSoulariumOdds}",
+					$"{nameof(ShowSoulariumRisk)}={ShowSoulariumRisk}",
+					$"{nameof(ShowSoulariumResult)}={ShowSoulariumResult}",
+					$"{nameof(ShowNextDraw)}={ShowNextDraw}",
+					$"{nameof(ShowPayoffsLeft)}={ShowPayoffsLeft}",
+					$"{nameof(ShowLethalNextDraw)}={ShowLethalNextDraw}",
 					"# Updates: CheckForUpdates asks github.com/" + UpdateLogic.Owner + "/" + UpdateLogic.Repo + " for the latest release on HDT start.",
 					"# AutoUpdate also downloads it (SHA-256 verified); it is swapped in when HDT restarts. Set either to False to opt out.",
 					$"{nameof(CheckForUpdates)}={CheckForUpdates}",

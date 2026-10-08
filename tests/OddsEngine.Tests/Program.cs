@@ -405,6 +405,105 @@ internal static class Program
 		CheckTrue("pre-v0.1.5 settings.ini with ShowDetails=True -> off once, then saved as version 2", !oldSt.ShowDetails && oldSt.SettingsVersion == PluginSettings.CurrentSettingsVersion
 			&& new PluginSettings().ShowDetails == false);
 
+		// ---- v0.1.6: Soularium 0 / 1+ / 2+ / 3 split (hypergeometric, 26 cards, 6 payoffs, 3 draws; C(26,3) = 2600)
+		var so = DrawMath.Soularium(26, 6);
+		Check("Soularium P(0) = C(20,3)/C(26,3)", so.P0, 1140.0 / 2600);
+		Check("Soularium P(1+) = 1 - P(0)", so.P1Plus, 1 - 1140.0 / 2600);
+		Check("Soularium P(2+) = (15*20 + 20)/2600", so.P2Plus, 320.0 / 2600);
+		Check("Soularium P(all 3) = C(6,3)/2600", so.PAll, 20.0 / 2600);
+		Check("Soularium distribution sums to 1", so.Dist.Sum(), 1);
+		CheckTrue("Soularium text: '1+ 56% · 2+ 12% · 3/3 1% · whiff 44%'", DrawMath.Text(DrawMath.SoulariumSegments(so)) == "1+ 56% · 2+ 12% · 3/3 1% · whiff 44%");
+		CheckTrue("Soularium colors: three green, whiff red", DrawMath.SoulariumSegments(so).Count(x => x.Item2 == SegKind.Hit) == 3 && DrawMath.SoulariumSegments(so).Last().Item2 == SegKind.Miss);
+		var soSmall = DrawMath.Soularium(2, 1);
+		CheckTrue("Soularium with 2 cards left: draws both, P(1+) 100%, P(all 3) 0%", soSmall.P1Plus == 1 && soSmall.PAll == 0 && soSmall.P0 == 0);
+		var soNone = DrawMath.Soularium(20, 0);
+		CheckTrue("Soularium with no payoffs: whiff 100%", soNone.P0 == 1 && soNone.P1Plus == 0);
+
+		// ---- v0.1.6: Soularium risk split (payoffs / playable / wasted incl. unknown cards)
+		var wDeck = new Dictionary<string, int> { ["PAY"] = 6, ["B1"] = 4, ["C3"] = 5, ["D5"] = 7 };
+		var wCost = new Dictionary<string, int> { ["PAY"] = 1, ["B1"] = 1, ["C3"] = 3, ["D5"] = 5 };
+		Func<string, int?> costOf = id => wCost.TryGetValue(id, out var cc) ? cc : (int?)null;
+		var wPay = new HashSet<string> { "PAY" };
+		var w = DrawMath.Waste(wDeck, 26, wPay, costOf, 2);
+		CheckTrue("waste split @2: 6 payoffs, 4 playable, 16 wasted (12 too costly + 4 unknown)", w.Payoffs == 6 && w.Playable == 4 && w.Wasted == 16 && w.Unknown == 4);
+		Check("Payoff 1+ = 1 - C(20,3)/C(26,3)", w.Payoff1Plus, 1 - 1140.0 / 2600);
+		Check("Waste 1+ = 1 - C(10,3)/C(26,3)", w.Waste1Plus, 1 - 120.0 / 2600);
+		Check("avg wasted = 3 * 16/26", w.AvgWasted, 3.0 * 16 / 26);
+		CheckTrue("risk text: 'Risk @2: Payoff 1+ 56% · Waste 1+ 95% · avg 1.8 wasted'", DrawMath.Text(DrawMath.RiskSegments(w)) == "Risk @2: Payoff 1+ 56% · Waste 1+ 95% · avg 1.8 wasted");
+		var w0 = DrawMath.Waste(wDeck, 26, wPay, costOf, -1);
+		CheckTrue("can't afford it: @0, every non-payoff wasted", w0.ManaLeft == 0 && w0.Playable == 0 && w0.Wasted == 20);
+		var w5 = DrawMath.Waste(wDeck, 26, wPay, costOf, 5);
+		CheckTrue("@5: all known non-payoffs playable, only unknown wasted", w5.Playable == 16 && w5.Wasted == 4);
+		var wOver = DrawMath.Waste(wDeck, 20, wPay, costOf, 2);
+		CheckTrue("HDT list ahead of DeckCount: groups never exceed the deck", wOver.Payoffs + wOver.Playable + wOver.Wasted == 20);
+
+		// ---- v0.1.6: next draw (payoff n/m, playable = cost <= next turn's mana, payoffs included)
+		var nd = DrawMath.NextDraw(wDeck, 26, wPay, costOf, 3);
+		Check("next draw payoff = 6/26", nd.Payoff, 6.0 / 26);
+		Check("next draw playable = (6 + 4 + 5)/26", nd.Playable, 15.0 / 26);
+		CheckTrue("next draw text: 'Next draw: Payoff 23% · Playable 58%'", DrawMath.Text(DrawMath.NextDrawSegments(nd)) == "Next draw: Payoff 23% · Playable 58%");
+		CheckTrue("next turn mana: max+1, cap 10, minus overload", DrawMath.NextTurnMana(4, 0) == 5 && DrawMath.NextTurnMana(10, 0) == 10 && DrawMath.NextTurnMana(9, 2) == 8
+			&& DrawMath.NextTurnMana(0, 0) == 1 && DrawMath.NextTurnMana(3, 5) == 0);
+		CheckTrue("payoffs left text", DrawMath.PayoffsLeftText(5) == "5 payoffs left" && DrawMath.PayoffsLeftText(1) == "1 payoff left" && DrawMath.PayoffsLeftText(0) == "0 payoffs left");
+
+		// ---- v0.1.6: Soularium result text (likelihood of the observed count)
+		CheckTrue("result texts", DrawMath.ResultText(0, 3, 0.08) == "Whiffed all 3: 8% chance" && DrawMath.ResultText(1, 3, 0.41) == "1 payoff: 41% chance"
+			&& DrawMath.ResultText(2, 3, 0.30) == "2 payoffs: 30% chance" && DrawMath.ResultText(3, 3, 0.04) == "All 3 payoffs: 4% chance");
+		CheckTrue("result likelihood = P(exactly k): 2 payoffs of 6/26 = 300/2600", Math.Abs(DrawMath.HyperDist(26, 6, 3)[2] - 300.0 / 2600) < 1e-9);
+
+		// ---- v0.1.6: luck score (mid-percentile of each outcome; 50% = as expected)
+		Check("mid-percentile: 50/50, got 1 -> 75%", DrawMath.MidPercentile(new[] { 0.5, 0.5 }, 1), 0.75);
+		Check("mid-percentile: 50/50, got 0 -> 25%", DrawMath.MidPercentile(new[] { 0.5, 0.5 }, 0), 0.25);
+		var luck = new LuckTally();
+		luck.AddBinary(0.4, true);
+		luck.AddBinary(0.4, false);
+		Check("luck: hit at 40% (80th) + miss at 40% (30th) -> 55%", luck.MeanPercentile, 0.55);
+		CheckTrue("luck: 1 hit vs 0.8 expected, rated 'a bit lucky'", luck.Actual == 1 && Math.Abs(luck.Expected - 0.8) < 1e-9 && LuckTally.Rating(luck.MeanPercentile) == "a bit lucky");
+		var luckS = new LuckTally();
+		luckS.AddCount(so.Dist, 0);
+		Check("luck: Soularium expected payoffs = 3*6/26", luckS.Expected, 3.0 * 6 / 26);
+		Check("luck: Soularium whiff percentile = P(0)/2", luckS.MeanPercentile, 1140.0 / 2600 / 2);
+		CheckTrue("luck line mentions rating and counts", DrawMath.LuckLine(luck, luckS).StartsWith("about average (3 events)") || DrawMath.LuckLine(luck, luckS).Contains("3 events"));
+		CheckTrue("luck line with no events", DrawMath.LuckLine(new LuckTally(), new LuckTally()).StartsWith("no predicted"));
+
+		// ---- v0.1.6: lethal next draw (estimate): deck cards whose draw makes next turn lethal / deck count
+		LethalInput NextBase(int taunts = 0, bool immune = false) => new LethalInput
+		{
+			Minions = new List<LethalAttacker> { new LethalAttacker { Name = "Imp", Attack = 3, Attacks = 1 } },
+			HeroAttack = 0, HeroAttacksLeft = 1, Mana = 4, OppHealth = 8, EnemyTaunts = taunts, OppImmune = immune
+		};
+		var lDeck = new List<(LethalCard card, int copies)>
+		{
+			(new LethalCard { Name = "Bolt4", Cost = 1, Damage = 4 }, 2),                          // 3 + 4 = 7: short
+			(new LethalCard { Name = "Big5", Cost = 4, Damage = 5 }, 1),                           // 3 + 5 = 8: lethal
+			(new LethalCard { Name = "Pricey", Cost = 6, Damage = 10 }, 2),                        // costs more than next turn's mana
+			(new LethalCard { Name = "Maybe", Cost = 1, Damage = 9, Approx = true }, 3),           // ambiguous: left out
+			(new LethalCard { Name = "Axe", Cost = 2, Damage = 5, ViaAttack = true, IsWeapon = true }, 1), // hero 5 + 3 = 8
+			(new LethalCard { Name = "Charger", Cost = 3, Damage = 5, ViaAttack = true }, 1),      // 3 + 5 = 8
+		};
+		var ndl = LethalEngine.NextDrawLethal(NextBase(), lDeck, 20);
+		CheckTrue("lethal next draw: 3 of 20 cards (Big5, Axe, Charger)", ndl.Hits == 3 && !ndl.AlreadyLethal && ndl.Cards.Count == 3);
+		Check("lethal next draw P = 3/20", ndl.P, 0.15);
+		CheckTrue("lethal next draw text: 'Lethal next draw ~15%'", ndl.Line == "Lethal next draw ~15%");
+		var ndlTaunt = LethalEngine.NextDrawLethal(NextBase(taunts: 1), lDeck, 20);
+		CheckTrue("enemy Taunt: attacks blocked, no single draw is enough -> ~0%", ndlTaunt.Hits == 0 && ndlTaunt.Line == "Lethal next draw ~0%");
+		var baseLethal = NextBase();
+		baseLethal.Hand.Add(new LethalCard { Name = "Soulfire", Cost = 1, Damage = 5 });
+		var ndlBase = LethalEngine.NextDrawLethal(baseLethal, lDeck, 20);
+		CheckTrue("already lethal next turn without a draw", ndlBase.AlreadyLethal && ndlBase.P == 1 && ndlBase.Line == "Lethal next turn ~100% (no draw needed)");
+		CheckTrue("enemy Immune: 0%", LethalEngine.NextDrawLethal(NextBase(immune: true), lDeck, 20).P == 0);
+		CheckTrue("next turn attacks: just-played windfury minion gets 2; frozen-through / can't attack get 0",
+			LethalEngine.AttacksNextTurn(new AttackState { Exhausted = true, TurnsInPlay = 0, Windfury = true }, false) == 2
+			&& LethalEngine.AttacksNextTurn(new AttackState { Frozen = true }, true) == 0
+			&& LethalEngine.AttacksNextTurn(new AttackState { CantAttack = true }, false) == 0
+			&& LethalEngine.AttacksNextTurn(new AttackState { Frozen = true }, false) == 1);
+
+		// ---- v0.1.6: new line toggles default on, round-trip through settings.ini
+		var dflt = PluginSettings.Parse(new string[0]);
+		CheckTrue("new line toggles default on", dflt.ShowSoulariumOdds && dflt.ShowSoulariumRisk && dflt.ShowSoulariumResult && dflt.ShowNextDraw && dflt.ShowPayoffsLeft && dflt.ShowLethalNextDraw);
+		var offs = PluginSettings.Parse(new[] { "SettingsVersion=2", "ShowSoulariumOdds=False", "ShowSoulariumRisk=False", "ShowSoulariumResult=False", "ShowNextDraw=False", "ShowPayoffsLeft=False", "ShowLethalNextDraw=False" });
+		CheckTrue("new line toggles parse False", !offs.ShowSoulariumOdds && !offs.ShowSoulariumRisk && !offs.ShowSoulariumResult && !offs.ShowNextDraw && !offs.ShowPayoffsLeft && !offs.ShowLethalNextDraw);
+
 		// ---- log files: not held open between flushes, nothing lost while a reader locks the file
 		var marker = "selftest-" + Guid.NewGuid().ToString("N");
 		ProbeLog.Line("TEST", marker + " a");

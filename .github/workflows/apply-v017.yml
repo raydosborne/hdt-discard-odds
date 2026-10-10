@@ -1,0 +1,52 @@
+name: apply-v017
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Apply v0.1.7 patch
+        run: |
+          set -euo pipefail
+          cat .github/v017/p0.b64 .github/v017/p1.b64 .github/v017/p2.b64 | tr -d '\n' | base64 -d | xz -d > /tmp/v017.patch
+          git apply --check /tmp/v017.patch
+          git apply /tmp/v017.patch
+      - name: Verify file contents (git blob sha)
+        run: |
+          set -euo pipefail
+          bad=0
+          while read -r sha path; do
+            got=$(git hash-object "$path")
+            if [ "$got" != "$sha" ]; then echo "MISMATCH $path $got != $sha"; bad=1; else echo "ok $path"; fi
+          done <<'EOF'
+          85e7c38aa9b0441e5dbe2133dc29b6c888aab563 DiscardOdds.csproj
+          498bcef32b29fdcfeaafe493f1df2a0ff63a437f README.md
+          1d701349339dfd8741e74c164bd2400532c962d8 src/DiscardOddsPlugin.UI.cs
+          8b496be71eab5479b34ea4b2e171f4d17134c3cd src/DiscardOddsPlugin.cs
+          3e222da99f8cc776fcd86f7a011ee49e23a9e512 src/DrawMath.cs
+          9f20f6e6e2facbe08091f373922df555774d639a src/ProbeLog.cs
+          fd68dc58a7f82db3df7bb21ca455918178308ca3 src/StatsEngine.cs
+          21377fd364baeb5d50072e00707e2a89c1876359 src/StatsWindows.cs
+          110cd1045f32c365a1609e5247d2445643773b30 tests/OddsEngine.Tests/OddsEngine.Tests.csproj
+          946dac2eae20050841e1c25ab2a59ee149c908b7 tests/OddsEngine.Tests/Program.cs
+          EOF
+          exit $bad
+      - name: Unit tests
+        run: |
+          cd tests/OddsEngine.Tests
+          dotnet run -c Release
+      - name: Commit and remove one-shot files
+        run: |
+          set -euo pipefail
+          git config user.name "Ray D Osborne"
+          git config user.email "raydosborne@gmail.com"
+          git rm -q .github/v017/p0.b64 .github/v017/p1.b64 .github/v017/p2.b64 .github/workflows/apply-v017.yml
+          git add DiscardOdds.csproj README.md src tests
+          git commit -m "v0.1.7: Payoff renamed to Discard in widget text; Card stats and Version compare windows (from HDT game history and replays); tests"
+          git push

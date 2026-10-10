@@ -15,7 +15,8 @@ An HDT plugin that shows live odds for the cards **you** care about in **any dec
    - What a Platysaur on your board is holding (from the game's own link enchantment) and Duke of Below's current size (2/2 + 2/2 per card discarded this game).
 4. **Lethal check** on your turn: `Face damage: X vs Y health`, **bold bright yellow** (one size larger) when it's lethal, red when short (see [Lethal check](#lethal-check-your-turn)).
 5. **Opener odds** during the mulligan and your turn 1 only: the chance of a turn-1 play (a 1-drop or, for the Discard preset, Cursed Catacombs), then `✓` or `Missed: X% chance` after your turn-1 draw (see [Opener odds](#opener-odds-mulligan--turn-1)).
-6. **New in v0.1.6:** payoffs left, next-draw odds, Soularium odds / risk / result, and a "lethal next draw" estimate, each with its own menu toggle (all on by default), plus a luck score in the log at game end (see [Widget lines](#widget-lines-v016)).
+6. **New in v0.1.6:** discard cards left, next-draw odds, Soularium odds / risk / result, and a "lethal next draw" estimate, each with its own menu toggle (all on by default), plus a luck score in the log at game end (see [Widget lines](#widget-lines-v016)).
+7. **New in v0.1.7: Card stats… and Version compare…** windows (separate windows, not on the overlay) built from your own HDT game history: keep / drawn win % per card, and the record of each deck version (see [Card stats and version compare](#card-stats-and-version-compare-v017)).
 
 ### Reading the widget
 
@@ -24,7 +25,7 @@ One line per card, kept short so it doesn't cover your mana, hand or the opponen
 | Color | Means |
 |---|---|
 | gold | card name at the start of a line |
-| **bold green** | hit % (also payoff, playable and lethal-next-draw %) |
+| **bold green** | hit % (also discard, playable and lethal-next-draw %) |
 | red | miss % (also Soularium whiff and waste %) |
 | orange | the card a *highest Cost* discard (Expired Merchant, Chronoclaws) would hit |
 | blue | the card a *lowest Cost* discard (Wicked Whispers) would hit |
@@ -33,7 +34,7 @@ One line per card, kept short so it doesn't cover your mana, hand or the opponen
 | `≈` | approximate model |
 | dim grey | details |
 
-The reasons behind each number (e.g. `lowest cost 3: …`, `8 targets in 24 cards, draw 3`) are hidden by default: **Show details is off by default** and stays in the menu (*Plugins → Discard Odds → Show details*) if you want them. v0.1.5 switches it off once for settings saved by older versions; after that your choice is kept. Update status is never shown on the overlay, only as the first item of the plugin menu (e.g. `Up to date (v0.1.6)` or `Update v0.1.6 ready: restart HDT to finish`). An update only takes effect after HDT restarts.
+The reasons behind each number (e.g. `lowest cost 3: …`, `8 targets in 24 cards, draw 3`) are hidden by default: **Show details is off by default** and stays in the menu (*Plugins → Discard Odds → Show details*) if you want them. v0.1.5 switches it off once for settings saved by older versions; after that your choice is kept. Update status is never shown on the overlay, only as the first item of the plugin menu (e.g. `Up to date (v0.1.7)` or `Update v0.1.7 ready: restart HDT to finish`). An update only takes effect after HDT restarts.
 
 The cards left in your deck come from HDT's deck count. "Casts When Drawn" cards such as Shreds of Time are left out, because drawing one replaces itself; with *Show details* they get a separate note.
 
@@ -51,7 +52,7 @@ The plugin also **logs evidence** (M0 probes) so the math can be checked against
 
 | Log tag | Question it settles |
 |---|---|
-| `[ODDS]` | For every odds card you play: the predicted hit % at that moment, then the real result (cards drawn, Catacombs offers, card discarded). The Soularium also gets `SOULARIUM result: 2 payoffs: 30% chance`. |
+| `[ODDS]` | For every odds card you play: the predicted hit % at that moment, then the real result (cards drawn, Catacombs offers, card discarded). The Soularium also gets `SOULARIUM result: 2 discard cards: 30% chance`. |
 | `[LUCK]` | Each turn-start draw vs its predicted target chance, and one game-end line rating how lucky the draws were. |
 | `[TEMP]` | How Temporary cards (Soularium, Catacombs, Sketch Artist) are marked on hand cards: attached `GBL_999e` enchantment, or GameTag 785 (`GHOSTLY`), or both. Also whether every end-of-turn burn was marked. |
 | `[DUKE]` | Where the "cards discarded this game" count lives. Compares `Player.EntitiesDiscardedFromHand` with any player tag containing DISCARD, logs which tags change on each discard, and compares Duke of Below's live attack/health with `2 + 2 × discards`. |
@@ -125,7 +126,7 @@ HDT loads plugins from **`%AppData%\HearthstoneDeckTracker\Plugins`**. Don't use
    ```
    (Shortcut: `dotnet build -c Release -p:HdtDir="$hdt" -p:DeployToHdt=true` builds and copies in one step.)
 3. Start HDT, go to **Options → Tracker → Plugins**, select **"Discard Odds (M0 probe)"** and tick **Enabled**.
-4. HDT's main window now has a **Plugins → Discard Odds** menu with: *Choose target cards for this deck…*, *Reload targets.json*, *Unlock widget (drag to move)*, *Show widget*, *Show details (reasons; off by default)*, *Compact mode (smaller widget)*, *Show lethal check (your turn)*, *Show one-drop odds (mulligan + turn 1)*, *Widget lines* (one switch per optional line, see [Widget lines](#widget-lines-v016)), *Reset widget position*, *Write deck snapshot to log now*, *Open log folder*, and the update status (first item) and options (*Check for updates when HDT starts*, *Auto-update*, *Check for updates now*, *Open releases page*). The plugin's button in Options → Tracker → Plugins also opens the log folder.
+4. HDT's main window now has a **Plugins → Discard Odds** menu with: *Choose target cards for this deck…*, *Reload targets.json*, *Card stats…*, *Version compare…*, *Unlock widget (drag to move)*, *Show widget*, *Show details (reasons; off by default)*, *Compact mode (smaller widget)*, *Show lethal check (your turn)*, *Show one-drop odds (mulligan + turn 1)*, *Widget lines* (one switch per optional line, see [Widget lines](#widget-lines-v016)), *Reset widget position*, *Write deck snapshot to log now*, *Open log folder*, and the update status (first item) and options (*Check for updates when HDT starts*, *Auto-update*, *Check for updates now*, *Open releases page*). The plugin's button in Options → Tracker → Plugins also opens the log folder.
 
 ## Target cards (targets.json)
 
@@ -189,30 +190,47 @@ For a 30-card list with 10 cards that count and none in the opening hand: going 
 
 ## Widget lines (v0.1.6)
 
-Each line below has its own switch in *Plugins → Discard Odds → Widget lines* (and a `settings.ini` key); all are **on by default**, so you can try them in game and turn off the ones you don't want. Numbers only, no advice. "Payoffs" are the deck's ticked target cards. *Show details* (off by default) adds a dim line with the counts behind each number.
+"Discard cards" here means the deck's ticked target cards (v0.1.7 renamed "payoff" to "discard" in all widget text). Each line below has its own switch in *Plugins → Discard Odds → Widget lines* (and a `settings.ini` key); all are **on by default**, so you can try them in game and turn off the ones you don't want. Numbers only, no advice. "Payoffs" are the deck's ticked target cards. *Show details* (off by default) adds a dim line with the counts behind each number.
 
 | Line (exact format) | When | Switch / `settings.ini` key |
 |---|---|---|
-| `5 payoffs left` (small, top of the box; `1 payoff left`) | in game, targets set | *Payoffs left* / `ShowPayoffsLeft` |
-| `Next draw: Payoff 33% · Playable 60%` | in game, targets set | *Next draw* / `ShowNextDraw` |
+| `5 discard cards left` (small, top of the box; `1 discard card left`) | in game, targets set | *Discard cards left* / `ShowPayoffsLeft` |
+| `Next draw: Discard 33% · Playable 60%` | in game, targets set | *Next draw* / `ShowNextDraw` |
 | `Soularium 1+ 76% · 2+ 31% · 3/3 4% · whiff 24%` | The Soularium in hand | *Soularium odds* / `ShowSoulariumOdds` |
-| `Risk @2: Payoff 1+ 76% · Waste 1+ 45% · avg 0.6 wasted` | The Soularium in hand | *Soularium risk* / `ShowSoulariumRisk` |
-| `Soularium → 2 payoffs: 30% chance` | after a Soularium's 3 draws, rest of that turn | *Soularium result* / `ShowSoulariumResult` |
+| `Risk @2: Discard 1+ 76% · Waste 1+ 45% · avg 0.6 wasted` | The Soularium in hand | *Soularium risk* / `ShowSoulariumRisk` |
+| `Soularium → 2 discard cards: 30% chance` | after a Soularium's 3 draws, rest of that turn | *Soularium result* / `ShowSoulariumResult` |
 | `Lethal next draw ~12%` (under the lethal check) | your turn, lethal check short | *Lethal next draw* / `ShowLethalNextDraw` |
 
-- **Payoffs left:** payoff copies still in your deck (HDT's deck list; Casts-When-Drawn cards left out).
-- **Next draw:** *Payoff* = payoffs left ÷ cards left. *Playable* = cards (payoffs included) whose printed cost is at most next turn's mana: your max mana + 1, capped at 10, minus Overload owed. Cards HDT can't name count as not playable. Both assume the deck as it is now.
-- **Soularium odds** (draws 3): exact hypergeometric chances of at least 1, at least 2 and all 3 payoffs (green), and of none (`whiff`, red). With the switch off, The Soularium keeps its old `hit% / miss%` line.
-- **Soularium risk:** `@N` is the mana you'd have left after paying for The Soularium (its current cost; on the opponent's turn, from next turn's mana). The deck is split into payoffs, *playable* (other cards costing at most N) and *wasted* (the rest, including cards HDT can't name; the drawn cards are Temporary). `Payoff 1+` (green) and `Waste 1+` (red) are the chances of at least one of each among the 3 draws; `avg … wasted` is the expected number of wasted cards.
-- **Soularium result:** once its 3 draws are known, how likely that exact outcome was from the deck at the time you played it: `Whiffed all 3: 8% chance` (red), `1 payoff: 41% chance`, `2 payoffs: 30% chance`, `All 3 payoffs: 4% chance` (green). It disappears when the turn ends and is also written to the log (`[ODDS] SOULARIUM result: …`).
+- **Discard cards left:** target copies still in your deck (HDT's deck list; Casts-When-Drawn cards left out).
+- **Next draw:** *Discard* = discard cards left ÷ cards left. *Playable* = cards (discard cards included) whose printed cost is at most next turn's mana: your max mana + 1, capped at 10, minus Overload owed. Cards HDT can't name count as not playable. Both assume the deck as it is now.
+- **Soularium odds** (draws 3): exact hypergeometric chances of at least 1, at least 2 and all 3 discard cards (green), and of none (`whiff`, red). With the switch off, The Soularium keeps its old `hit% / miss%` line.
+- **Soularium risk:** `@N` is the mana you'd have left after paying for The Soularium (its current cost; on the opponent's turn, from next turn's mana). The deck is split into discard cards, *playable* (other cards costing at most N) and *wasted* (the rest, including cards HDT can't name; the drawn cards are Temporary). `Discard 1+` (green) and `Waste 1+` (red) are the chances of at least one of each among the 3 draws; `avg … wasted` is the expected number of wasted cards.
+- **Soularium result:** once its 3 draws are known, how likely that exact outcome was from the deck at the time you played it: `Whiffed all 3: 8% chance` (red), `1 discard card: 41% chance`, `2 discard cards: 30% chance`, `All 3 discard cards: 4% chance` (green). It disappears when the turn ends and is also written to the log (`[ODDS] SOULARIUM result: …`).
 - **Lethal next draw ~X%** (estimate, your turn, only when the lethal check is short): the share of the cards left in your deck that, drawn next turn, would make it lethal. It assumes your board, your hand and the enemy stay as they are now; next turn every minion with attack can attack (Windfury twice; frozen ones only drop out on the opponent's turn), your hero swings with the equipped weapon, and you have next turn's mana. A deck card counts if it deals immediate face damage (direct damage or Charge; Rush can't hit face, weapons too) at printed cost and, together with your hand, covers the shortfall. Ambiguous cards (`≈`: random splits with enemy minions up, conditions, "instead" upgrades) are left out. `Lethal next turn ~100% (no draw needed)` when the board and hand alone would be enough. Logged with the lethal check (`[LETHAL] … || Lethal next draw ~X% | …`). Needs *Show lethal check* on.
-- **Luck score (log only):** at game end one `[LUCK]` line rates how lucky your draws were: every resolved odds prediction (cards you played, e.g. The Soularium, Catacombs, Wicked Whispers) and every turn-start draw (target chance read at turn start) is compared with its prediction. It gives the average outcome percentile (50% = exactly as expected, higher = luckier), the rating (`lucky`, `a bit lucky`, `about average`, `a bit unlucky`, `unlucky`), and target hits vs expected hits, e.g. `[LUCK] game #3: a bit lucky (14 events): avg outcome percentile 58% (50% = as expected, higher = luckier) · payoffs hit 6 vs 4.9 expected (+1.1) | card odds: … | turn draws: …`.
+- **Luck score (log only):** at game end one `[LUCK]` line rates how lucky your draws were: every resolved odds prediction (cards you played, e.g. The Soularium, Catacombs, Wicked Whispers) and every turn-start draw (target chance read at turn start) is compared with its prediction. It gives the average outcome percentile (50% = exactly as expected, higher = luckier), the rating (`lucky`, `a bit lucky`, `about average`, `a bit unlucky`, `unlucky`), and target hits vs expected hits, e.g. `[LUCK] game #3: a bit lucky (14 events): avg outcome percentile 58% (50% = as expected, higher = luckier) · discard cards hit 6 vs 4.9 expected (+1.1) | card odds: … | turn draws: …`.
+
+## Card stats and version compare (v0.1.7)
+
+Two menu items open **separate windows** (nothing is added to the in-game widget). Both read only your own HDT data on this PC, so they work for anyone with games recorded in HDT; nothing is uploaded. They cover the active deck plus any other HDT deck with the same name and class. Columns sort when you click their header. Below 5 games a rate shows `n/a` and the row is grey. These are past results, not advice.
+
+**Card stats…** — one row per card of the selected deck version:
+
+| Column | Meaning |
+|---|---|
+| Keep win % | win rate in games where the card was in your opening hand **after** the mulligan |
+| Games kept | won + lost games where it was kept |
+| Drawn win % | win rate in games where you drew or played the card at any point (opening hand included; a card tossed in the mulligan and never drawn again doesn't count) |
+| Games drawn | won + lost games where it was drawn or played |
+
+HDT's game history stores the result of each game but not which cards you held, so the window reads each game's **HDT replay** (`.hdtreplay` in HDT's `Replays` folder, which holds the game's Power.log) to find your opening hand at the end of the mulligan and every card from your starting deck that reached your hand or the board later. Games without a replay file are left out; the window says how many games it used out of how many. Draws and unfinished games are not counted.
+
+**Version compare…** — one row per HDT version of the deck (`v1.0`, `v1.1`, …, oldest first): the date range of games played with it, record (W-L), win %, and the cards added and removed compared with the row above. Games HDT stored without a deck version are shown in a separate `(no version)` row.
 
 ## Updates
 
 When HDT starts, the plugin asks GitHub once for this repository's latest release (`https://api.github.com/repos/raydosborne/hdt-discard-odds/releases/latest`, HTTPS, no other site, no data about you or your games sent). It then compares that release's tag (e.g. `v0.2.0`) with the running version:
 
-- **Up to date:** the first Plugins-menu item reads `Up to date (v0.1.6)`. **Offline:** nothing changes; network errors are only written to the plugin log.
+- **Up to date:** the first Plugins-menu item reads `Up to date (v0.1.7)`. **Offline:** nothing changes; network errors are only written to the plugin log.
 - **Newer, Auto-update on (default):** it downloads the release's `DiscardOdds.dll` and `DiscardOdds.dll.sha256` and checks three things: the SHA-256 matches, the DLL really is `DiscardOdds` with the tag's version, and the download URLs belong to this repository's release assets. If all three pass, it replaces the copy in `%AppData%\HearthstoneDeckTracker\Plugins\…` and the first Plugins-menu item reads **"Update vX.Y.Z ready: restart HDT to finish"** (nothing is shown on the overlay). HDT locks the DLL it is running from (its local `Plugins` folder, not the AppData one), and on the next start it copies the newer AppData file over automatically. The previous DLL is kept as `DiscardOdds\update\DiscardOdds.previous.dll`. If any check fails, nothing is replaced and the notice says so.
 - **Newer, Auto-update off:** the first menu item reads "Update vX.Y.Z available (auto-update off): open release page"; click it to open the release page.
 
@@ -259,9 +277,11 @@ src/DiscardOddsPlugin.cs  IPlugin: events, menu, widget refresh, per-deck target
 src/OddsEngine.cs         pure hit/miss math, card-specific rules, generic draw-text parser (no HDT types; unit-tested)
 src/TargetConfig.cs       targets.json model, presets, tiny JSON reader (no HDT types; unit-tested)
 src/TargetsWindow.cs      "Choose target cards" window (code-only WPF)
+src/StatsWindows.cs       "Card stats" and "Version compare" windows, reading HDT's game history and replays
+src/StatsEngine.cs        replay (Power.log) reader, per-card keep/drawn win rates, version diffs (no HDT types; unit-tested)
 src/GameReader.cs         reads HDT state into snapshots / the counting rule
 src/Probes.cs             the M0 probes ([ODDS] [TEMP] [DUKE] [TIE] [DECK] [MULL] [PLATY]), Soularium result, [LUCK] score
-src/DrawMath.cs           Soularium split, payoff/playable/waste split, next draw, luck score, exact line texts (no HDT types; unit-tested)
+src/DrawMath.cs           Soularium split, discard/playable/waste split, next draw, luck score, exact line texts (no HDT types; unit-tested)
 src/PayoffWidget.cs       overlay box, drag via User32.MouseInput
 src/WidgetPolicy.cs       which cards may appear on the widget (never / main), opener hits (1-drops, exclusions, extra hits) (no HDT types; unit-tested)
 src/ProbeLog.cs           log files (not held open), tiny JSON writer, settings.ini
@@ -269,7 +289,7 @@ src/LethalEngine.cs       lethal check: face-damage count, burn/Charge/weapon pa
 src/UpdateLogic.cs        update rules: tag/version compare, release parsing, asset URL pinning, SHA-256 (no HDT types; unit-tested)
 src/Updater.cs            update check + download + verify + swap into HDT's AppData plugin folder
 .github/workflows/release.yml  builds the DLL on a version tag and publishes it + checksum as a GitHub Release
-tests/OddsEngine.Tests    `dotnet run -c Release`: math vs closed-form hypergeometric values, draw-text parsing, targets.json rules and I/O, widget card policy, opener hits and targets.json upgrades, widget position rules, lethal check and lethal next draw, Soularium / waste / next-draw / luck math, update rules, log file sharing
+tests/OddsEngine.Tests    `dotnet run -c Release`: math vs closed-form hypergeometric values, draw-text parsing, targets.json rules and I/O, widget card policy, opener hits and targets.json upgrades, widget position rules, lethal check and lethal next draw, Soularium / waste / next-draw / luck math, replay reader, card stats and version diffs, update rules, log file sharing
 ```
 
 ## Releasing a new version (maintainer)

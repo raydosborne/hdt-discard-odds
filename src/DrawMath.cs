@@ -218,39 +218,39 @@ namespace DiscardOdds
 			(" · whiff ", SegKind.Label), (Pct(o.P0), SegKind.Miss)
 		};
 
-		/// <summary>"Risk @2: Payoff 1+ 76% · Waste 1+ 45% · avg 0.6 wasted" (@2 = mana left after Soularium).</summary>
+		/// <summary>"Risk @2: Discard 1+ 76% · Waste 1+ 45% · avg 0.6 wasted" (@2 = mana left after Soularium).</summary>
 		public static List<(string, SegKind)> RiskSegments(WasteSplit w) => new List<(string, SegKind)>
 		{
-			($"Risk @{w.ManaLeft}: Payoff 1+ ", SegKind.Label), (Pct(w.Payoff1Plus), SegKind.Hit),
+			($"Risk @{w.ManaLeft}: Discard 1+ ", SegKind.Label), (Pct(w.Payoff1Plus), SegKind.Hit),
 			(" · Waste 1+ ", SegKind.Label), (Pct(w.Waste1Plus), SegKind.Miss),
 			(" · avg " + w.AvgWasted.ToString("0.0", CultureInfo.InvariantCulture) + " wasted", SegKind.Dim)
 		};
 
 		public static string RiskDetail(WasteSplit w, int soulariumCost, int manaNow) => string.Format(CultureInfo.InvariantCulture,
-			"@{0} = {1} mana − Soularium cost {2}. Deck {3}: {4} payoffs, {5} playable (cost ≤ {0}), {6} wasted{7}",
+			"@{0} = {1} mana − Soularium cost {2}. Deck {3}: {4} discard cards, {5} playable (cost ≤ {0}), {6} wasted{7}",
 			w.ManaLeft, manaNow, soulariumCost, w.M, w.Payoffs, w.Playable, w.Wasted, w.Unknown > 0 ? $" (incl. {w.Unknown} unknown)" : "");
 
-		/// <summary>"Next draw: Payoff 33% · Playable 60%".</summary>
+		/// <summary>"Next draw: Discard 33% · Playable 60%".</summary>
 		public static List<(string, SegKind)> NextDrawSegments(NextDrawOdds n) => new List<(string, SegKind)>
 		{
-			("Next draw: Payoff ", SegKind.Label), (Pct(n.Payoff), SegKind.Hit),
+			("Next draw: Discard ", SegKind.Label), (Pct(n.Payoff), SegKind.Hit),
 			(" · Playable ", SegKind.Label), (Pct(n.Playable), SegKind.Hit)
 		};
 
 		public static string NextDrawDetail(NextDrawOdds n) => string.Format(CultureInfo.InvariantCulture,
-			"{0} payoffs / {1} cards; playable = cost ≤ {2} (next turn's mana), {3} cards; unknown cards count as not playable",
+			"{0} discard cards / {1} cards; playable = cost ≤ {2} (next turn's mana), {3} cards; unknown cards count as not playable",
 			n.Payoffs, n.M, n.Mana, n.PlayableCount);
 
-		/// <summary>"5 payoffs left" / "1 payoff left".</summary>
-		public static string PayoffsLeftText(int n) => n == 1 ? "1 payoff left" : $"{Math.Max(0, n)} payoffs left";
+		/// <summary>"5 discard cards left" / "1 discard card left".</summary>
+		public static string PayoffsLeftText(int n) => n == 1 ? "1 discard card left" : $"{Math.Max(0, n)} discard cards left";
 
-		/// <summary>"Whiffed all 3: 8% chance", "1 payoff: 41% chance", "2 payoffs: 30% chance", "All 3 payoffs: 4% chance".</summary>
+		/// <summary>"Whiffed all 3: 8% chance", "1 discard card: 41% chance", "2 discard cards: 30% chance", "All 3 discard cards: 4% chance".</summary>
 		public static string ResultText(int payoffs, int draws, double p)
 		{
 			string what;
 			if(payoffs <= 0) what = $"Whiffed all {draws}";
-			else if(payoffs >= draws && draws > 1) what = $"All {draws} payoffs";
-			else what = payoffs == 1 ? "1 payoff" : $"{payoffs} payoffs";
+			else if(payoffs >= draws && draws > 1) what = $"All {draws} discard cards";
+			else what = payoffs == 1 ? "1 discard card" : $"{payoffs} discard cards";
 			return $"{what}: {Pct(p)} chance";
 		}
 
@@ -263,7 +263,7 @@ namespace DiscardOdds
 			if(all.Events == 0) return "no predicted draws/discards resolved this game";
 			var diff = all.Actual - all.Expected;
 			return string.Format(CultureInfo.InvariantCulture,
-				"{0} ({1}): avg outcome percentile {2} (50% = as expected, higher = luckier) · payoffs hit {3:0} vs {4:0.0} expected ({5}{6:0.0}) | card odds: {7} | turn draws: {8}",
+				"{0} ({1}): avg outcome percentile {2} (50% = as expected, higher = luckier) · discard cards hit {3:0} vs {4:0.0} expected ({5}{6:0.0}) | card odds: {7} | turn draws: {8}",
 				LuckTally.Rating(all.MeanPercentile), all.Events + (all.Events == 1 ? " event" : " events"), Pct(all.MeanPercentile),
 				all.Actual, all.Expected, diff >= 0 ? "+" : "−", Math.Abs(diff),
 				cards?.Short() ?? "0 events", turnDraws?.Short() ?? "0 events");

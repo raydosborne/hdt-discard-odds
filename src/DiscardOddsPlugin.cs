@@ -264,7 +264,7 @@ namespace DiscardOdds
 				var (payoffsLeft, m, known) = GameReader.PayoffCount(Targets.Current);
 				var unknown = m - known;
 				var c = new WidgetContent();
-				// "5 payoffs left": tiny header (toggle "Payoffs left").
+				// "5 discard cards left": tiny header (toggle "Payoffs left").
 				if(_settings.ShowPayoffsLeft)
 					c.Header = new WidgetRow { Text = DrawMath.PayoffsLeftText(payoffsLeft), Small = true, TextColor = WidgetColors.Light };
 				c.Rows.AddRange(oneDrop);
@@ -275,13 +275,13 @@ namespace DiscardOdds
 				var lastHand = _probes.LastHand;
 				var state = GameReader.BuildOddsState(lastHand, Targets.Current);
 				var nextMana = GameReader.NextTurnMana();
-				// "Next draw: Payoff 33% · Playable 60%" (playable = cost ≤ next turn's mana).
+				// "Next draw: Discard 33% · Playable 60%" (playable = cost ≤ next turn's mana).
 				if(_settings.ShowNextDraw && state.DeckCount > 0)
 				{
 					var nd = DrawMath.NextDraw(state.Deck, state.DeckCount, Targets.Current, GameReader.BaseCost, nextMana);
 					c.Rows.Add(new WidgetRow { Segments = DrawMath.NextDrawSegments(nd), Detail = DrawMath.NextDrawDetail(nd) });
 				}
-				// "Soularium → 2 payoffs: 30% chance": the last Soularium's 3 draws, for the rest of that turn.
+				// "Soularium → 2 discard cards: 30% chance": the last Soularium's 3 draws, for the rest of that turn.
 				var sr = _probes.LastSoulariumResult;
 				if(_settings.ShowSoulariumResult && sr != null && sr.Turn == _probes.Turn)
 					c.Rows.Add(new WidgetRow { Name = "Soularium", Text = "→ " + sr.Text, TextColor = sr.Payoffs > 0 ? WidgetColors.Hit : WidgetColors.Miss, Bold = true });
@@ -320,14 +320,14 @@ namespace DiscardOdds
 			}
 
 			// Soularium in hand: "Soularium 1+ 76% · 2+ 31% · 3/3 4% · whiff 24%" (toggle off = the old hit/miss row),
-			// then "Risk @2: Payoff 1+ 76% · Waste 1+ 45% · avg 0.6 wasted" (mana left after paying for it).
+			// then "Risk @2: Discard 1+ 76% · Waste 1+ 45% · avg 0.6 wasted" (mana left after paying for it).
 			void AddSoulariumRows(List<WidgetRow> rows, CardOdds o, OddsState state, int n, int nextMana)
 			{
 				if(_settings.ShowSoulariumOdds)
 				{
 					var so = DrawMath.Soularium(state.DeckCount, n);
 					rows.Add(new WidgetRow { CardId = o.CardId, Name = "Soularium", Segments = DrawMath.SoulariumSegments(so),
-						Detail = $"{so.N} payoffs in {so.M} cards, {so.Draws} draws: P(0/1/2/3) = {string.Join(" / ", so.Dist.Select(OddsEngine.Pct))}" });
+						Detail = $"{so.N} discard cards in {so.M} cards, {so.Draws} draws: P(0/1/2/3) = {string.Join(" / ", so.Dist.Select(OddsEngine.Pct))}" });
 				}
 				else
 					rows.Add(new WidgetRow { CardId = o.CardId, Name = o.Name, Hit = o.Hit, Approx = o.Approx, Detail = o.Detail });

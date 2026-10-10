@@ -147,6 +147,10 @@ namespace DiscardOdds
 			};
 			var targets = new MenuItem { Header = "Choose target cards for this deck…" };
 			targets.Click += (s, e) => OpenTargetsWindow();
+			var cardStats = new MenuItem { Header = "Card stats…" };
+			cardStats.Click += (s, e) => Guard(() => new CardStatsWindow().Show());
+			var versions = new MenuItem { Header = "Version compare…" };
+			versions.Click += (s, e) => Guard(() => new VersionCompareWindow().Show());
 			var reload = new MenuItem { Header = "Reload targets.json" };
 			reload.Click += (s, e) => Guard(() => { LoadTargetConfig(); RefreshTargets(true); UpdateWidget(true); });
 			var dump = new MenuItem { Header = "Write deck snapshot to log now" };
@@ -178,10 +182,10 @@ namespace DiscardOdds
 				lines.Items.Add(item);
 				return item;
 			}
-			Toggle("Payoffs left (\"5 payoffs left\")", x => x.ShowPayoffsLeft, (x, v) => x.ShowPayoffsLeft = v);
-			Toggle("Next draw (payoff / playable)", x => x.ShowNextDraw, (x, v) => x.ShowNextDraw = v);
+			Toggle("Discard cards left (\"5 discard cards left\")", x => x.ShowPayoffsLeft, (x, v) => x.ShowPayoffsLeft = v);
+			Toggle("Next draw (discard / playable)", x => x.ShowNextDraw, (x, v) => x.ShowNextDraw = v);
 			Toggle("Soularium odds (1+ / 2+ / 3/3 / whiff)", x => x.ShowSoulariumOdds, (x, v) => x.ShowSoulariumOdds = v);
-			Toggle("Soularium risk (payoff / waste)", x => x.ShowSoulariumRisk, (x, v) => x.ShowSoulariumRisk = v);
+			Toggle("Soularium risk (discard / waste)", x => x.ShowSoulariumRisk, (x, v) => x.ShowSoulariumRisk = v);
 			Toggle("Soularium result (that turn)", x => x.ShowSoulariumResult, (x, v) => x.ShowSoulariumResult = v);
 			Toggle("Lethal next draw (estimate)", x => x.ShowLethalNextDraw, (x, v) => x.ShowLethalNextDraw = v);
 			var releases = new MenuItem { Header = "Open releases page" };
@@ -189,6 +193,8 @@ namespace DiscardOdds
 			root.Items.Add(_updateItem);
 			root.Items.Add(targets);
 			root.Items.Add(reload);
+			root.Items.Add(cardStats);
+			root.Items.Add(versions);
 			root.Items.Add(new Separator());
 			root.Items.Add(_unlockItem);
 			root.Items.Add(show);

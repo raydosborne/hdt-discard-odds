@@ -429,7 +429,7 @@ internal static class Program
 		Check("Payoff 1+ = 1 - C(20,3)/C(26,3)", w.Payoff1Plus, 1 - 1140.0 / 2600);
 		Check("Waste 1+ = 1 - C(10,3)/C(26,3)", w.Waste1Plus, 1 - 120.0 / 2600);
 		Check("avg wasted = 3 * 16/26", w.AvgWasted, 3.0 * 16 / 26);
-		CheckTrue("risk text: 'Risk @2: Payoff 1+ 56% · Waste 1+ 95% · avg 1.8 wasted'", DrawMath.Text(DrawMath.RiskSegments(w)) == "Risk @2: Payoff 1+ 56% · Waste 1+ 95% · avg 1.8 wasted");
+		CheckTrue("risk text: 'Risk @2: Discard 1+ 56% · Waste 1+ 95% · avg 1.8 wasted'", DrawMath.Text(DrawMath.RiskSegments(w)) == "Risk @2: Discard 1+ 56% · Waste 1+ 95% · avg 1.8 wasted");
 		var w0 = DrawMath.Waste(wDeck, 26, wPay, costOf, -1);
 		CheckTrue("can't afford it: @0, every non-payoff wasted", w0.ManaLeft == 0 && w0.Playable == 0 && w0.Wasted == 20);
 		var w5 = DrawMath.Waste(wDeck, 26, wPay, costOf, 5);
@@ -441,14 +441,14 @@ internal static class Program
 		var nd = DrawMath.NextDraw(wDeck, 26, wPay, costOf, 3);
 		Check("next draw payoff = 6/26", nd.Payoff, 6.0 / 26);
 		Check("next draw playable = (6 + 4 + 5)/26", nd.Playable, 15.0 / 26);
-		CheckTrue("next draw text: 'Next draw: Payoff 23% · Playable 58%'", DrawMath.Text(DrawMath.NextDrawSegments(nd)) == "Next draw: Payoff 23% · Playable 58%");
+		CheckTrue("next draw text: 'Next draw: Discard 23% · Playable 58%'", DrawMath.Text(DrawMath.NextDrawSegments(nd)) == "Next draw: Discard 23% · Playable 58%");
 		CheckTrue("next turn mana: max+1, cap 10, minus overload", DrawMath.NextTurnMana(4, 0) == 5 && DrawMath.NextTurnMana(10, 0) == 10 && DrawMath.NextTurnMana(9, 2) == 8
 			&& DrawMath.NextTurnMana(0, 0) == 1 && DrawMath.NextTurnMana(3, 5) == 0);
-		CheckTrue("payoffs left text", DrawMath.PayoffsLeftText(5) == "5 payoffs left" && DrawMath.PayoffsLeftText(1) == "1 payoff left" && DrawMath.PayoffsLeftText(0) == "0 payoffs left");
+		CheckTrue("payoffs left text", DrawMath.PayoffsLeftText(5) == "5 discard cards left" && DrawMath.PayoffsLeftText(1) == "1 discard card left" && DrawMath.PayoffsLeftText(0) == "0 discard cards left");
 
 		// ---- v0.1.6: Soularium result text (likelihood of the observed count)
-		CheckTrue("result texts", DrawMath.ResultText(0, 3, 0.08) == "Whiffed all 3: 8% chance" && DrawMath.ResultText(1, 3, 0.41) == "1 payoff: 41% chance"
-			&& DrawMath.ResultText(2, 3, 0.30) == "2 payoffs: 30% chance" && DrawMath.ResultText(3, 3, 0.04) == "All 3 payoffs: 4% chance");
+		CheckTrue("result texts", DrawMath.ResultText(0, 3, 0.08) == "Whiffed all 3: 8% chance" && DrawMath.ResultText(1, 3, 0.41) == "1 discard card: 41% chance"
+			&& DrawMath.ResultText(2, 3, 0.30) == "2 discard cards: 30% chance" && DrawMath.ResultText(3, 3, 0.04) == "All 3 discard cards: 4% chance");
 		CheckTrue("result likelihood = P(exactly k): 2 payoffs of 6/26 = 300/2600", Math.Abs(DrawMath.HyperDist(26, 6, 3)[2] - 300.0 / 2600) < 1e-9);
 
 		// ---- v0.1.6: luck score (mid-percentile of each outcome; 50% = as expected)
@@ -503,6 +503,67 @@ internal static class Program
 		CheckTrue("new line toggles default on", dflt.ShowSoulariumOdds && dflt.ShowSoulariumRisk && dflt.ShowSoulariumResult && dflt.ShowNextDraw && dflt.ShowPayoffsLeft && dflt.ShowLethalNextDraw);
 		var offs = PluginSettings.Parse(new[] { "SettingsVersion=2", "ShowSoulariumOdds=False", "ShowSoulariumRisk=False", "ShowSoulariumResult=False", "ShowNextDraw=False", "ShowPayoffsLeft=False", "ShowLethalNextDraw=False" });
 		CheckTrue("new line toggles parse False", !offs.ShowSoulariumOdds && !offs.ShowSoulariumRisk && !offs.ShowSoulariumResult && !offs.ShowNextDraw && !offs.ShowPayoffsLeft && !offs.ShowLethalNextDraw);
+
+		// ---- v0.1.7: replay (Power.log) reader: opening hand after the mulligan, cards drawn / played later
+		string G(string x) => "D 21:00:00.0000000 GameState.DebugPrintPower() - " + x;
+		var plog = new List<string>
+		{
+			G("CREATE_GAME"),
+			G("FULL_ENTITY - Creating ID=4 CardID=EX1_308"), G("    tag=ZONE value=HAND"), G("    tag=CONTROLLER value=1"),
+			G("FULL_ENTITY - Creating ID=5 CardID=CORE_A"), G("    tag=CONTROLLER value=1"), G("    tag=ZONE value=HAND"),
+			G("FULL_ENTITY - Creating ID=6 CardID="), G("    tag=ZONE value=DECK"), G("    tag=CONTROLLER value=1"),
+			G("FULL_ENTITY - Creating ID=7 CardID="), G("    tag=ZONE value=DECK"), G("    tag=CONTROLLER value=1"),
+			G("FULL_ENTITY - Creating ID=30 CardID="), G("    tag=ZONE value=HAND"), G("    tag=CONTROLLER value=2"),
+			G("FULL_ENTITY - Creating ID=31 CardID="), G("    tag=ZONE value=HAND"), G("    tag=CONTROLLER value=2"),
+			G("TAG_CHANGE Entity=[entityName=Alpha id=5 zone=HAND zonePos=2 cardId=CORE_A player=1] tag=ZONE value=DECK "),
+			G("SHOW_ENTITY - Updating Entity=[entityName=UNKNOWN ENTITY [cardType=INVALID] id=6 zone=DECK zonePos=0 cardId= player=1] CardID=CORE_B"), G("    tag=ZONE value=HAND"),
+			"D 21:00:01.0000000 PowerTaskList.DebugPrintPower() -     TAG_CHANGE Entity=[entityName=Alpha id=5 zone=DECK zonePos=0 cardId=CORE_A player=1] tag=ZONE value=HAND ",
+			G("TAG_CHANGE Entity=GameEntity tag=STEP value=MAIN_READY "),
+			G("SHOW_ENTITY - Updating Entity=[entityName=UNKNOWN ENTITY [cardType=INVALID] id=7 zone=DECK zonePos=0 cardId= player=1] CardID=CORE_C"),
+			G("TAG_CHANGE Entity=[entityName=Gamma id=7 zone=DECK zonePos=0 cardId=CORE_C player=1] tag=ZONE value=HAND "),
+			G("FULL_ENTITY - Creating ID=50 CardID=CORE_GEN"), G("    tag=ZONE value=HAND"), G("    tag=CONTROLLER value=1"),
+			G("TAG_CHANGE Entity=[entityName=Opp id=31 zone=HAND zonePos=1 cardId=OPP_X player=2] tag=ZONE value=PLAY "),
+		};
+		var pr = StatsEngine.ParsePowerLog(plog);
+		CheckTrue("replay: friendly player found from the known opening hand", pr.Ok && pr.FriendlyPlayer == 1);
+		CheckTrue("replay: kept = final opening hand (tossed card out, replacement in)", pr.Kept.SetEquals(new[] { "EX1_308", "CORE_B" }));
+		CheckTrue("replay: drawn = kept + drawn later; not generated cards, not the opponent's, not PowerTaskList duplicates",
+			pr.Drawn.SetEquals(new[] { "EX1_308", "CORE_B", "CORE_C" }));
+		CheckTrue("replay: no mulligan end -> not usable", !StatsEngine.ParsePowerLog(plog.Take(10)).Ok && !StatsEngine.ParsePowerLog(null).Ok);
+
+		// ---- v0.1.7: card stats (decided games only, n/a below the minimum)
+		var recs = new List<GameCardRecord>
+		{
+			new GameCardRecord { Result = 1, Kept = new HashSet<string> { "A" }, Drawn = new HashSet<string> { "A", "B" } },
+			new GameCardRecord { Result = -1, Kept = new HashSet<string> { "A" }, Drawn = new HashSet<string> { "A" } },
+			new GameCardRecord { Result = 1, Kept = new HashSet<string>(), Drawn = new HashSet<string> { "B" } },
+			new GameCardRecord { Result = 0, Kept = new HashSet<string> { "A" }, Drawn = new HashSet<string> { "A" } },
+		};
+		var cardList = new[] { ("A", "Alpha", 1), ("B", "Beta", 2), ("C", "Gamma", 3) };
+		var cs2 = StatsEngine.CardStats(recs, cardList, 2);
+		var rA = cs2.First(x => x.CardId == "A"); var rB = cs2.First(x => x.CardId == "B"); var rC = cs2.First(x => x.CardId == "C");
+		CheckTrue("card stats A: kept 2 games 50%, drawn 2 games 50% (draw result skipped)", rA.KeepGames == 2 && rA.KeepWinText == "50%" && rA.DrawGames == 2 && rA.DrawWinText == "50%" && !rA.LowSample);
+		CheckTrue("card stats B: never kept -> n/a, drawn 2 games 100%", rB.KeepGames == 0 && rB.KeepWinText == "n/a" && rB.DrawWinText == "100%");
+		CheckTrue("card stats C: no games -> n/a, greyed", rC.KeepWinText == "n/a" && rC.DrawWinText == "n/a" && rC.LowSample && rC.DrawSort < 0);
+		CheckTrue("card stats: below 5 games -> n/a by default", StatsEngine.CardStats(recs, cardList).All(x => x.KeepWinText == "n/a" && x.LowSample));
+		CheckTrue("rate text", StatsEngine.Rate(3, 5) == "60%" && StatsEngine.Rate(3, 4) == "n/a" && StatsEngine.Rate(2, 3, 1) == "67%");
+
+		// ---- v0.1.7: version compare (diff vs previous, date range, record)
+		var vPrev = new Dictionary<string, (string name, int count)> { ["A"] = ("Alpha", 2), ["B"] = ("Beta", 1) };
+		var vCur = new Dictionary<string, (string name, int count)> { ["A"] = ("Alpha", 1), ["C"] = ("Gamma", 2) };
+		var (vAdd, vRem) = StatsEngine.Diff(vPrev, vCur);
+		CheckTrue("diff: +2 Gamma; −1 Alpha, −1 Beta", vAdd.SequenceEqual(new[] { "+2 Gamma" }) && vRem.SequenceEqual(new[] { "−1 Alpha", "−1 Beta" }));
+		CheckTrue("date range formats", StatsEngine.DateRange(null, null) == "no games"
+			&& StatsEngine.DateRange(new DateTime(2026, 3, 26, 10, 0, 0), new DateTime(2026, 3, 26, 22, 0, 0)) == "Mar 26, 2026"
+			&& StatsEngine.DateRange(new DateTime(2026, 3, 26), new DateTime(2026, 4, 10)) == "Mar 26 – Apr 10, 2026"
+			&& StatsEngine.DateRange(new DateTime(2025, 12, 30), new DateTime(2026, 1, 2)) == "Dec 30, 2025 – Jan 2, 2026");
+		var vRows = StatsEngine.Versions(new[]
+		{
+			new StatsEngine.VersionInput { Label = "v1.0", Cards = vPrev, Games = new List<(DateTime, int)> { (new DateTime(2026, 3, 1), 1), (new DateTime(2026, 3, 2), -1), (new DateTime(2026, 3, 3), 0) } },
+			new StatsEngine.VersionInput { Label = "v1.1", Cards = vCur, Games = Enumerable.Range(0, 6).Select(i => (new DateTime(2026, 3, 10 + i), i < 4 ? 1 : -1)).ToList() },
+		});
+		CheckTrue("versions: v1.0 1-1, n/a, first version", vRows[0].Record == "1-1" && vRows[0].WinText == "n/a" && vRows[0].Added == "(first version)" && vRows[0].LowSample && vRows[0].Dates == "Mar 1 – Mar 3, 2026");
+		CheckTrue("versions: v1.1 4-2, 67%, +2 Gamma / −1 Alpha, −1 Beta", vRows[1].Record == "4-2" && vRows[1].WinText == "67%" && vRows[1].Added == "+2 Gamma" && vRows[1].Removed == "−1 Alpha, −1 Beta" && !vRows[1].LowSample);
 
 		// ---- log files: not held open between flushes, nothing lost while a reader locks the file
 		var marker = "selftest-" + Guid.NewGuid().ToString("N");

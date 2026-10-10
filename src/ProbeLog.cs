@@ -238,10 +238,10 @@ namespace DiscardOdds
 		public bool CompactMode = true;            // smaller font, tighter padding, short header (default ON)
 		// v0.1.6 lines, each with its own menu toggle (all on by default)
 		public bool ShowSoulariumOdds = true;      // "Soularium 1+ 76% · 2+ 31% · 3/3 4% · whiff 24%"
-		public bool ShowSoulariumRisk = true;      // "Risk @2: Payoff 1+ 76% · Waste 1+ 45% · avg 0.6 wasted"
-		public bool ShowSoulariumResult = true;    // "Soularium → 2 payoffs: 30% chance" (rest of that turn)
-		public bool ShowNextDraw = true;           // "Next draw: Payoff 33% · Playable 60%"
-		public bool ShowPayoffsLeft = true;        // "5 payoffs left"
+		public bool ShowSoulariumRisk = true;      // "Risk @2: Discard 1+ 76% · Waste 1+ 45% · avg 0.6 wasted"
+		public bool ShowSoulariumResult = true;    // "Soularium → 2 discard cards: 30% chance" (rest of that turn)
+		public bool ShowNextDraw = true;           // "Next draw: Discard 33% · Playable 60%"
+		public bool ShowPayoffsLeft = true;        // "5 discard cards left"
 		public bool ShowLethalNextDraw = true;     // "Lethal next draw ~12%" under a short lethal check
 		/// <summary>2 = v0.1.5. Files from older versions get ShowDetails reset to off once (it is still in the menu).</summary>
 		public const int CurrentSettingsVersion = 2;

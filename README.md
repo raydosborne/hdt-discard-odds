@@ -5,17 +5,17 @@
 An HDT plugin that shows live odds for the cards **you** care about in **any deck**. It shows **numbers only, never advice**, and uses no HSReplay data: everything is computed from HDT's live view of your deck and hand.
 
 1. **Target cards, per deck.** Pick your deck's target cards (payoffs, combo pieces, win conditions) in *Plugins → Discard Odds → Choose target cards for this deck…*: a window lists the active deck's cards with checkboxes. Each deck keeps its own list in `targets.json` (see [Target cards](#target-cards-targetsjson)).
-2. **Small by design.** Compact mode (default) keeps fonts and padding small; toggle it with *Plugins → Discard Odds → Compact mode*. Every optional line has its own on/off switch in *Plugins → Discard Odds → Widget lines* (see [Widget lines](#widget-lines-v016)). When there is nothing to show, the box hides itself.
+2. **Small by design.** Compact mode (default) keeps fonts and padding small; toggle it with *Plugins → Discard Odds → Compact mode*. Every optional line has its own on/off switch in the *Plugins → Discard Odds* menu, under the *Widget lines:* header (see [Widget lines](#widget-lines-v016)). When there is nothing to show, the box hides itself; it also hides for decks with no target cards and no matching preset, and everything can be switched off with the master switch *Plugin ON* (see [On/off](#onoff-and-auto-hide-v018)).
 3. **"If you play it" hit/miss** for every draw or discard card in your hand:
    - **Any card whose text draws cards** ("Draw a card", "Draw 2 cards", from HearthstoneJSON text via HearthDb) gets one line `Card name  hit% / miss%` for drawing at least one target. Conditional draws (Deathrattle, "If …", Combo, Choose One, "for each" …) are marked `≈`.
    - **Card-specific models** cover discard and special-draw cards: Wicked Whispers (lowest Cost), Expired Merchant and Chronoclaws (highest Cost), Soulfire and Darkshire Librarian (random), Ocular Occultist and Gemstone Hoarder (choose), Chamber of Viscidus (look at 3), Platysaur (draw, then discard it on death), The Soularium, Hand of Gul'dan, Cursed Catacombs (Discover from deck), Sketch Artist (Shadow spell). For example: `Wicked Whispers  50% / 50%  → Walking Dead / Party Fiend` (every tied card is listed; targets in bold).
    - **One line per card in hand, never two.** Any "When you play or discard this, draw N" card shows a single `(discard)` line: the chance its draws find a target when it is discarded (the played odds are the same draws and appear in the detail line).
-   - **Chronoclaws** shows no percentages, only the card(s) it would discard right now: `Chronoclaws → Soul Barrage` (orange). **Expired Merchant** does the same whenever the result is certain; on a tie between a target and a non-target it shows hit/miss.
+   - **Chronoclaws** shows no percentages, only the card(s) it would discard right now: `Chronoclaws → Soul Barrage` (orange). Since v0.1.8 the line stays while Chronoclaws is **equipped**: it names the card your next hero attack would discard (same rule and format), updates after each attack, and disappears when the weapon is gone. **Expired Merchant** does the same whenever the result is certain; on a tie between a target and a non-target it shows hit/miss.
    - **Never on the widget**, in any mode, not even with *Show details*: cards where **you choose** the discard (Ocular Occultist, Gemstone Hoarder; you can already see whether a target is in hand) and **Hand of Gul'dan** (removed completely in v0.1.5). A Platysaur holding one of them doesn't name it either. One rule (`src/WidgetPolicy.cs`) decides this for every widget line.
    - What a Platysaur on your board is holding (from the game's own link enchantment) and Duke of Below's current size (2/2 + 2/2 per card discarded this game).
-4. **Lethal check** on your turn: `Face damage: X vs Y health`, **bold bright yellow** (one size larger) when it's lethal, red when short (see [Lethal check](#lethal-check-your-turn)).
+4. **Lethal check** on your turn: when your damage can reach lethal, the widget shows just **`LETHAL`** (bold, bright yellow, one size larger). When it isn't lethal, nothing is shown (see [Lethal check](#lethal-check-your-turn)).
 5. **Opener odds** during the mulligan and your turn 1 only: the chance of a turn-1 play (a 1-drop or, for the Discard preset, Cursed Catacombs), then `✓` or `Missed: X% chance` after your turn-1 draw (see [Opener odds](#opener-odds-mulligan--turn-1)).
-6. **New in v0.1.6:** discard cards left, next-draw odds, Soularium odds / risk / result, and a "lethal next draw" estimate, each with its own menu toggle (all on by default), plus a luck score in the log at game end (see [Widget lines](#widget-lines-v016)).
+6. **New in v0.1.6:** discard cards left, next-draw odds, Soularium odds / risk / result, each with its own menu toggle (all on by default), plus a luck score in the log at game end (see [Widget lines](#widget-lines-v016)). v0.1.8 removed the "lethal next draw" widget line (it stays in the log).
 7. **New in v0.1.7: Card stats… and Version compare…** windows (separate windows, not on the overlay) built from your own HDT game history: keep / drawn win % per card, and the record of each deck version (see [Card stats and version compare](#card-stats-and-version-compare-v017)).
 
 ### Reading the widget
@@ -25,16 +25,16 @@ One line per card, kept short so it doesn't cover your mana, hand or the opponen
 | Color | Means |
 |---|---|
 | gold | card name at the start of a line |
-| **bold green** | hit % (also discard, playable and lethal-next-draw %) |
+| **bold green** | hit % (also discard, playable %) |
 | red | miss % (also Soularium whiff and waste %) |
 | orange | the card a *highest Cost* discard (Expired Merchant, Chronoclaws) would hit |
 | blue | the card a *lowest Cost* discard (Wicked Whispers) would hit |
-| **bold bright yellow** | `LETHAL` lethal-check line (red when short) |
+| **bold bright yellow** | `LETHAL` (only shown when lethal) |
 | **bold** card after `→` | that card is a target |
 | `≈` | approximate model |
 | dim grey | details |
 
-The reasons behind each number (e.g. `lowest cost 3: …`, `8 targets in 24 cards, draw 3`) are hidden by default: **Show details is off by default** and stays in the menu (*Plugins → Discard Odds → Show details*) if you want them. v0.1.5 switches it off once for settings saved by older versions; after that your choice is kept. Update status is never shown on the overlay, only as the first item of the plugin menu (e.g. `Up to date (v0.1.7)` or `Update v0.1.7 ready: restart HDT to finish`). An update only takes effect after HDT restarts.
+The reasons behind each number (e.g. `lowest cost 3: …`, `8 targets in 24 cards, draw 3`) are hidden by default: **Show details is off by default** and stays in the menu (*Plugins → Discard Odds → Show details*) if you want them. v0.1.5 switches it off once for settings saved by older versions; after that your choice is kept. Update status is never shown on the overlay, only as the first item of the plugin menu (e.g. `Up to date (v0.1.8)` or `Update v0.1.8 ready: restart HDT to finish`). An update only takes effect after HDT restarts.
 
 The cards left in your deck come from HDT's deck count. "Casts When Drawn" cards such as Shreds of Time are left out, because drawing one replaces itself; with *Show details* they get a separate note.
 
@@ -126,7 +126,7 @@ HDT loads plugins from **`%AppData%\HearthstoneDeckTracker\Plugins`**. Don't use
    ```
    (Shortcut: `dotnet build -c Release -p:HdtDir="$hdt" -p:DeployToHdt=true` builds and copies in one step.)
 3. Start HDT, go to **Options → Tracker → Plugins**, select **"Discard Odds (M0 probe)"** and tick **Enabled**.
-4. HDT's main window now has a **Plugins → Discard Odds** menu with: *Choose target cards for this deck…*, *Reload targets.json*, *Card stats…*, *Version compare…*, *Unlock widget (drag to move)*, *Show widget*, *Show details (reasons; off by default)*, *Compact mode (smaller widget)*, *Show lethal check (your turn)*, *Show one-drop odds (mulligan + turn 1)*, *Widget lines* (one switch per optional line, see [Widget lines](#widget-lines-v016)), *Reset widget position*, *Write deck snapshot to log now*, *Open log folder*, and the update status (first item) and options (*Check for updates when HDT starts*, *Auto-update*, *Check for updates now*, *Open releases page*). The plugin's button in Options → Tracker → Plugins also opens the log folder.
+4. HDT's main window now has a **Plugins → Discard Odds** menu. Its first item is the master switch *Plugin ON (uncheck to turn off for non-discard decks)* (see [On/off](#onoff-and-auto-hide-v018)); then: *Choose target cards for this deck…*, *Reload targets.json*, *Card stats…*, *Version compare…*, *Unlock widget (drag to move)*, *Show widget*, *Show details (reasons; off by default)*, *Compact mode (smaller widget)*, *Show lethal check (your turn)*, *Show one-drop odds (mulligan + turn 1)*, *Reset widget position*, then a *Widget lines:* header followed directly by the five line switches (no submenu since v0.1.8; see [Widget lines](#widget-lines-v016)), *Write deck snapshot to log now*, *Open log folder*, and the update status (first item) and options (*Check for updates when HDT starts*, *Auto-update*, *Check for updates now*, *Open releases page*). The plugin's button in Options → Tracker → Plugins also opens the log folder.
 
 ## Target cards (targets.json)
 
@@ -136,7 +136,7 @@ HDT loads plugins from **`%AppData%\HearthstoneDeckTracker\Plugins`**. Don't use
 
 ```json
 {
-  "version": 2,
+  "version": 3,
   "decks": [
     {
       "deckId": "00000000-0000-0000-0000-000000000000",
@@ -149,7 +149,7 @@ HDT loads plugins from **`%AppData%\HearthstoneDeckTracker\Plugins`**. Don't use
       "name": "Discard Warlock payoffs",
       "autoApplyMinMatches": 3,
       "targets": [ { "id": "RLK_534", "name": "Soul Barrage" }, { "id": "RLK_532", "name": "Walking Dead" } ],
-      "oneDropExclude": [ { "id": "DMF_119", "name": "Wicked Whispers" }, { "id": "TIME_026", "name": "Entropic Continuity" } ],
+      "oneDropExclude": [ { "id": "DMF_119", "name": "Wicked Whispers" }, { "id": "TIME_026", "name": "Entropic Continuity" }, { "id": "EX1_308", "name": "Soulfire" } ],
       "openerExtraHits": [ { "id": "TLC_451", "name": "Cursed Catacombs" } ]
     }
   ]
@@ -158,23 +158,23 @@ HDT loads plugins from **`%AppData%\HearthstoneDeckTracker\Plugins`**. Don't use
 - Targets are HearthstoneJSON card ids (hover a card in the window to see its id). `name` is only a label, and a plain id string works too.
 - A deck matches by `deckId` (HDT's deck id) first, then by `deckName`, so a re-imported deck still finds its list.
 - A preset with `autoApplyMinMatches` > 0 applies to decks without their own list that contain at least that many of its cards. Set it to 0 to make a preset manual-only.
-- `oneDropExclude` (on a preset or a deck) lists 1-Cost cards that should **not** count as a turn-1 play in the [opener odds](#opener-odds-mulligan--turn-1). The built-in Discard preset excludes Wicked Whispers (`DMF_119`) and Entropic Continuity (`TIME_026`).
+- `oneDropExclude` (on a preset or a deck) lists 1-Cost cards that should **not** count as a turn-1 play in the [opener odds](#opener-odds-mulligan--turn-1). The built-in Discard preset excludes Wicked Whispers (`DMF_119`) , Entropic Continuity (`TIME_026`) and Soulfire (`EX1_308`).
 - `openerExtraHits` (on a preset or a deck) lists other cards that **do** count as a turn-1 play, whatever their Cost. The built-in Discard preset adds Cursed Catacombs (`TLC_451`, 0 Cost). An excluded card never counts, even if it is also listed here.
 - A deck without its own `oneDropExclude` / `openerExtraHits` uses the matching preset's, even if the deck has its own target list. `[]` on a deck means "none" (every 1-drop counts / 1-drops only).
-- Older files are upgraded once: a `targets.json` from v0.1.4 or earlier (`"version": 1`) has the built-in Discard preset upgraded: Entropic Continuity is added to its excluded cards (next to Wicked Whispers) and Cursed Catacombs as an extra hit, is saved as `"version": 2`, and the previous file is kept as `targets.json.bak`. After that, your edits are left alone.
+- Older files are upgraded once: a `targets.json` from v0.1.4 or earlier (`"version": 1`) has the built-in Discard preset upgraded: Entropic Continuity is added to its excluded cards (next to Wicked Whispers) and Cursed Catacombs as an extra hit, is saved as `"version": 2`, and the previous file is kept as `targets.json.bak`. After that, your edits are left alone. A `targets.json` from v0.1.5–v0.1.7 (`"version": 2`) gets Soulfire added to the Discard preset's excluded cards once (nothing else changes), is saved as `"version": 3`, and the previous file is kept as `targets.json.bak`.
 
 **Moving the widget:** Plugins → Discard Odds → tick *Unlock widget*. The border turns gold. Drag it with the left mouse button over the Hearthstone window, then untick *Unlock widget*. The position is saved as a fraction of the overlay size, so it survives resolution changes. By default the widget starts lower-center-left of the board, just above your hand, so it does not cover either HDT deck list; once you drag it, your saved position is used instead. *Reset widget position* goes back to the default.
 
 ## Lethal check (your turn)
 
-On your turn the widget adds a factual count of the damage that can reach the enemy hero right now, for example **`Face damage: 14 vs 13 health → LETHAL (all face)`** (bold bright yellow) or `Face damage: 9 vs 13 health (4 short)`. With *Show details* a dim second line breaks it down: `board 8 + hero 3 + hand 3 (Soulfire)`, and lists your characters that can't hit face this turn with the reason (`not counted: Felbeast 1/1 (played this turn)`). It is a count, not a suggestion of what to play.
+On your turn the plugin counts the damage that can reach the enemy hero right now. On the widget this is only the word **`LETHAL`** (bold bright yellow) when the count reaches the enemy's health plus armor, with no numbers; when it doesn't, the widget shows nothing. The full count is written to the log every time it changes: `[LETHAL] Face damage: 9 vs 13 health (4 short) | board 8 + hero 3 + hand 3 (Soulfire) | …`, including your characters that can't hit face (`not counted: Felbeast 1/1 (played this turn)`) and, when short, the next-draw estimate. It is a count, not a suggestion of what to play.
 
 - **Board:** minions and your hero that can still attack, following HDT's own board-damage rules: a minion played or summoned this turn counts only with Charge (Rush can't go face), even when the game hasn't sent its *exhausted* flag yet; frozen, dormant, *can't attack* and Titans with abilities left are skipped; Windfury counts twice. If the enemy has **any Taunt** minion, all attack damage is shown as blocked (`enemy Taunt ×1: 10 attack damage can't go face`), and only damage from your hand counts.
 - **Hand:** the best set of cards you can afford with your current mana. That covers "Deal N damage" spells and battlecries that can target the face (Spell Damage added), Charge minions, and a weapon (it replaces your hero's current attack).
-- **≈** marks damage that might not all reach the face: random splits while the enemy has minions (Soul Barrage, Arcane Missiles), "...instead" upgrades (base value counted), Combo / If conditions, conditional Charge. Then "LETHAL?" is shown instead of "LETHAL".
+- **≈** marks damage that might not all reach the face: random splits while the enemy has minions (Soul Barrage, Arcane Missiles), "...instead" upgrades (base value counted), Combo / If conditions, conditional Charge. In the log the line then reads "LETHAL?"; the widget still shows just `LETHAL`.
 - Not counted (first version): hero powers, buffs, cost reductions from playing cards, board-space limits, enemy secrets, armor gain or healing.
 - Opponent health includes armor; an Immune hero is never shown as lethal. Turn it off with *Show lethal check* or `ShowLethalCheck=False` in `settings.ini`.
-- **Lethal next draw (estimate):** when the check is short, a second line `Lethal next draw ~12%` gives the share of your deck whose draw would make **next** turn lethal. See [Widget lines](#widget-lines-v016).
+- **Lethal next draw (log only since v0.1.8):** when the check is short, the `[LETHAL]` log line ends with `|| Lethal next draw ~12% | …`, the share of your deck whose draw would make **next** turn lethal (see below). It is no longer shown on the widget and has no toggle.
 
 ## Opener odds (mulligan + turn 1)
 
@@ -190,7 +190,7 @@ For a 30-card list with 10 cards that count and none in the opening hand: going 
 
 ## Widget lines (v0.1.6)
 
-"Discard cards" here means the deck's ticked target cards (v0.1.7 renamed "payoff" to "discard" in all widget text). Each line below has its own switch in *Plugins → Discard Odds → Widget lines* (and a `settings.ini` key); all are **on by default**, so you can try them in game and turn off the ones you don't want. Numbers only, no advice. "Payoffs" are the deck's ticked target cards. *Show details* (off by default) adds a dim line with the counts behind each number.
+"Discard cards" here means the deck's ticked target cards (v0.1.7 renamed "payoff" to "discard" in all widget text). Each line below has its own switch in the *Plugins → Discard Odds* menu, listed under the greyed-out *Widget lines:* header (v0.1.8: no submenu) (and a `settings.ini` key); all are **on by default**, so you can try them in game and turn off the ones you don't want. Numbers only, no advice. *Show details* (off by default) adds a dim line with the counts behind each number.
 
 | Line (exact format) | When | Switch / `settings.ini` key |
 |---|---|---|
@@ -199,15 +199,19 @@ For a 30-card list with 10 cards that count and none in the opening hand: going 
 | `Soularium 1+ 76% · 2+ 31% · 3/3 4% · whiff 24%` | The Soularium in hand | *Soularium odds* / `ShowSoulariumOdds` |
 | `Risk @2: Discard 1+ 76% · Waste 1+ 45% · avg 0.6 wasted` | The Soularium in hand | *Soularium risk* / `ShowSoulariumRisk` |
 | `Soularium → 2 discard cards: 30% chance` | after a Soularium's 3 draws, rest of that turn | *Soularium result* / `ShowSoulariumResult` |
-| `Lethal next draw ~12%` (under the lethal check) | your turn, lethal check short | *Lethal next draw* / `ShowLethalNextDraw` |
 
 - **Discard cards left:** target copies still in your deck (HDT's deck list; Casts-When-Drawn cards left out).
 - **Next draw:** *Discard* = discard cards left ÷ cards left. *Playable* = cards (discard cards included) whose printed cost is at most next turn's mana: your max mana + 1, capped at 10, minus Overload owed. Cards HDT can't name count as not playable. Both assume the deck as it is now.
 - **Soularium odds** (draws 3): exact hypergeometric chances of at least 1, at least 2 and all 3 discard cards (green), and of none (`whiff`, red). With the switch off, The Soularium keeps its old `hit% / miss%` line.
 - **Soularium risk:** `@N` is the mana you'd have left after paying for The Soularium (its current cost; on the opponent's turn, from next turn's mana). The deck is split into discard cards, *playable* (other cards costing at most N) and *wasted* (the rest, including cards HDT can't name; the drawn cards are Temporary). `Discard 1+` (green) and `Waste 1+` (red) are the chances of at least one of each among the 3 draws; `avg … wasted` is the expected number of wasted cards.
 - **Soularium result:** once its 3 draws are known, how likely that exact outcome was from the deck at the time you played it: `Whiffed all 3: 8% chance` (red), `1 discard card: 41% chance`, `2 discard cards: 30% chance`, `All 3 discard cards: 4% chance` (green). It disappears when the turn ends and is also written to the log (`[ODDS] SOULARIUM result: …`).
-- **Lethal next draw ~X%** (estimate, your turn, only when the lethal check is short): the share of the cards left in your deck that, drawn next turn, would make it lethal. It assumes your board, your hand and the enemy stay as they are now; next turn every minion with attack can attack (Windfury twice; frozen ones only drop out on the opponent's turn), your hero swings with the equipped weapon, and you have next turn's mana. A deck card counts if it deals immediate face damage (direct damage or Charge; Rush can't hit face, weapons too) at printed cost and, together with your hand, covers the shortfall. Ambiguous cards (`≈`: random splits with enemy minions up, conditions, "instead" upgrades) are left out. `Lethal next turn ~100% (no draw needed)` when the board and hand alone would be enough. Logged with the lethal check (`[LETHAL] … || Lethal next draw ~X% | …`). Needs *Show lethal check* on.
+- **Lethal next draw ~X%** (log only since v0.1.8; estimate, your turn, only when the lethal check is short): the share of the cards left in your deck that, drawn next turn, would make it lethal. It assumes your board, your hand and the enemy stay as they are now; next turn every minion with attack can attack (Windfury twice; frozen ones only drop out on the opponent's turn), your hero swings with the equipped weapon, and you have next turn's mana. A deck card counts if it deals immediate face damage (direct damage or Charge; Rush can't hit face, weapons too) at printed cost and, together with your hand, covers the shortfall. Ambiguous cards (`≈`: random splits with enemy minions up, conditions, "instead" upgrades) are left out. `Lethal next turn ~100% (no draw needed)` when the board and hand alone would be enough. Logged with the lethal check (`[LETHAL] … || Lethal next draw ~X% | …`).
 - **Luck score (log only):** at game end one `[LUCK]` line rates how lucky your draws were: every resolved odds prediction (cards you played, e.g. The Soularium, Catacombs, Wicked Whispers) and every turn-start draw (target chance read at turn start) is compared with its prediction. It gives the average outcome percentile (50% = exactly as expected, higher = luckier), the rating (`lucky`, `a bit lucky`, `about average`, `a bit unlucky`, `unlucky`), and target hits vs expected hits, e.g. `[LUCK] game #3: a bit lucky (14 events): avg outcome percentile 58% (50% = as expected, higher = luckier) · discard cards hit 6 vs 4.9 expected (+1.1) | card odds: … | turn draws: …`.
+
+## On/off and auto-hide (v0.1.8)
+
+- **Master switch:** the first item in *Plugins → Discard Odds* is *Plugin ON (uncheck to turn off for non-discard decks)*, on by default. Unchecked, the widget is hidden everywhere and the plugin skips its odds, prediction and lethal work (game events are ignored); the menu, *Card stats…* and *Version compare…* still work. The choice is saved as `PluginEnabled` in `settings.ini`, so it survives HDT restarts. Tick it again to turn everything back on (predictions pick up from the next event).
+- **Auto-hide:** in game, if the active deck has no target cards of its own and no preset matches it, the widget hides itself (no "No target cards set" box any more). Unlock the widget (*Unlock widget*) to see it anyway, e.g. to move it or to open the target picker hint.
 
 ## Card stats and version compare (v0.1.7)
 
@@ -230,7 +234,7 @@ HDT's game history stores the result of each game but not which cards you held, 
 
 When HDT starts, the plugin asks GitHub once for this repository's latest release (`https://api.github.com/repos/raydosborne/hdt-discard-odds/releases/latest`, HTTPS, no other site, no data about you or your games sent). It then compares that release's tag (e.g. `v0.2.0`) with the running version:
 
-- **Up to date:** the first Plugins-menu item reads `Up to date (v0.1.7)`. **Offline:** nothing changes; network errors are only written to the plugin log.
+- **Up to date:** the first Plugins-menu item reads `Up to date (v0.1.8)`. **Offline:** nothing changes; network errors are only written to the plugin log.
 - **Newer, Auto-update on (default):** it downloads the release's `DiscardOdds.dll` and `DiscardOdds.dll.sha256` and checks three things: the SHA-256 matches, the DLL really is `DiscardOdds` with the tag's version, and the download URLs belong to this repository's release assets. If all three pass, it replaces the copy in `%AppData%\HearthstoneDeckTracker\Plugins\…` and the first Plugins-menu item reads **"Update vX.Y.Z ready: restart HDT to finish"** (nothing is shown on the overlay). HDT locks the DLL it is running from (its local `Plugins` folder, not the AppData one), and on the next start it copies the newer AppData file over automatically. The previous DLL is kept as `DiscardOdds\update\DiscardOdds.previous.dll`. If any check fails, nothing is replaced and the notice says so.
 - **Newer, Auto-update off:** the first menu item reads "Update vX.Y.Z available (auto-update off): open release page"; click it to open the release page.
 
@@ -242,7 +246,7 @@ The checksum guards against corrupted or truncated downloads. It is published in
 
 ```
 %AppData%\HearthstoneDeckTracker\DiscardOdds\
-    settings.ini                 widget position / toggles (WidgetPositionSaved=True once you move it), ShowLethalCheck, ShowDetails, ShowOneDrop, CompactMode, the Widget lines switches (ShowPayoffsLeft, ShowNextDraw, ShowSoulariumOdds, ShowSoulariumRisk, ShowSoulariumResult, ShowLethalNextDraw), CheckForUpdates / AutoUpdate
+    settings.ini                 widget position / toggles (WidgetPositionSaved=True once you move it), PluginEnabled (master switch), ShowLethalCheck, ShowDetails, ShowOneDrop, CompactMode, the Widget lines switches (ShowPayoffsLeft, ShowNextDraw, ShowSoulariumOdds, ShowSoulariumRisk, ShowSoulariumResult), CheckForUpdates / AutoUpdate
     update\                      last downloaded update (DiscardOdds.dll) and the DLL it replaced (DiscardOdds.previous.dll)
     targets.json                 your per-deck target cards and presets (targets.json.bak = previous version)
     logs\m0_YYYY-MM-DD.log       readable probe log (one per day, games separated by ===== lines)

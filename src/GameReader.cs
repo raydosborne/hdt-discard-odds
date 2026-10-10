@@ -459,6 +459,13 @@ namespace DiscardOdds
 
 		public static bool IsMyTurn() => HdtApi.Core.Game?.PlayerEntity?.IsCurrentPlayer == true;
 
+		/// <summary>True while the player has this weapon equipped (on the board as a weapon).</summary>
+		public static bool HasWeaponEquipped(string cardId)
+		{
+			try { return Player?.Board?.Any(e => e.IsWeapon && e.CardId == cardId && !e.IsInGraveyard) == true; }
+			catch { return false; }
+		}
+
 		/// <summary>Mana available right now (same formula as the lethal check).</summary>
 		public static int ManaNow()
 		{

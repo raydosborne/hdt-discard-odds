@@ -253,6 +253,9 @@ internal static class Program
 		lx.EnemyTaunts = 1;
 		var lt = LethalEngine.Compute(lx);
 		CheckTrue("enemy Taunt blocks attack damage, burn still counts, shown clearly", lt.Board == 0 && lt.BlockedByTaunt == 10 && lt.Total == 10 && !lt.Lethal && lt.Line.EndsWith("(3 short)") && lt.Detail.Contains("Taunt ×1"));
+		CheckTrue("v0.1.8 lethal widget text: only 'LETHAL' when lethal, nothing otherwise",
+			LethalEngine.WidgetText(new LethalResult { Lethal = true, Line = "Face damage: 14 vs 13 health → LETHAL" }) == "LETHAL"
+			&& LethalEngine.WidgetText(new LethalResult { Lethal = false, Line = "Face damage: 4 vs 13 (9 short)" }) == null && LethalEngine.WidgetText(null) == null);
 		var la = LethalEngine.Compute(new LethalInput { Mana = 4, OppHealth = 10, OppArmor = 3, HeroAttack = 2, HeroAttacksLeft = 1, Hand = { P("Chronoclaws", "WEAPON", 4, "", atk: 4) } });
 		CheckTrue("weapon replaces hero attack (4, not 2+4); armor shown", la.Total == 4 && la.Weapon == "Chronoclaws" && la.Line.Contains("13 (10 health + 3 armor)") && la.Line.Contains("(9 short)"));
 		CheckTrue("immune hero never lethal", !LethalEngine.Compute(new LethalInput { OppHealth = 1, OppImmune = true, Minions = { new LethalAttacker { Attack = 5, Attacks = 1 } } }).Lethal);
@@ -312,6 +315,15 @@ internal static class Program
 		var cl = OddsEngine.Compute(rules["END_016"], cs, 51);
 		CheckTrue("Chronoclaws: no % even on a mixed tie, names both tied cards (orange), % kept in detail",
 			cl.NoOdds && cl.DiscardRule == "highest" && cl.DiscardNames.Count == 2 && cl.Detail.Contains("target 50% / 50%"));
+		// v0.1.8: Chronoclaws equipped -> same rule on the whole hand (the weapon is no longer in it), updates as the hand changes.
+		var csEq = new OddsState { Deck = deck, DeckCount = 24, Group = payoffs, Hand = new List<OddsHandCard> { H(52, "RLK_534", 4, true), H(53, "X2", 4, false), H(54, "X3", 1, false) } };
+		var eqc = OddsEngine.ForEquippedWeapon(csEq, "END_016", rules);
+		CheckTrue("Chronoclaws equipped: same format as in hand (names only, both tied 4-costs)", eqc != null && eqc.NoOdds && eqc.Name == cl.Name && eqc.DiscardRule == "highest"
+			&& eqc.DiscardNames.Count == 2 && eqc.DiscardNames.SequenceEqual(cl.DiscardNames));
+		csEq.Hand.RemoveAll(h => h.EntityId == 52 || h.EntityId == 53); // after an attack discarded a 4-cost, the next one…
+		var eqc2 = OddsEngine.ForEquippedWeapon(csEq, "END_016", rules);
+		CheckTrue("Chronoclaws equipped: after the hand changes, names the new highest-Cost card", eqc2.DiscardNames.Count == 1 && eqc2.DiscardNames[0].name == "X3");
+		CheckTrue("no rule for the weapon -> no line", OddsEngine.ForEquippedWeapon(csEq, "NOPE_1", rules) == null && OddsEngine.ForEquippedWeapon(csEq, null, rules) == null);
 		var emMixed = OddsEngine.Compute(rules["ULD_163"], cs, 51);
 		CheckTrue("Expired Merchant on a mixed tie keeps %", !emMixed.NoOdds && Math.Abs(emMixed.Hit - 0.5) < 1e-9);
 		cs.Hand.RemoveAll(h => h.EntityId == 53);
@@ -346,41 +358,50 @@ internal static class Program
 		CheckTrue("one-drops without exclusions: all 1-cost cards", WidgetPolicy.OneDropIds(oneDeck, null).SetEquals(new[] { "DMF_119", "TLC_603", "CATA_493" }));
 		CheckTrue("one-drops with Wicked Whispers excluded", WidgetPolicy.OneDropIds(oneDeck, new HashSet<string> { "DMF_119" }).SetEquals(new[] { "TLC_603", "CATA_493" }));
 		var exCfg = TargetConfig.CreateDefault();
-		CheckTrue("default Discard preset excludes Wicked Whispers + Entropic Continuity from one-drops", exCfg.Presets[0].OneDropExclude.Select(t => t.Id).SequenceEqual(new[] { "DMF_119", "TIME_026" }));
+		CheckTrue("default Discard preset excludes Wicked Whispers + Entropic Continuity + Soulfire from one-drops", exCfg.Presets[0].OneDropExclude.Select(t => t.Id).SequenceEqual(new[] { "DMF_119", "TIME_026", "EX1_308" }));
 		CheckTrue("default Discard preset counts Cursed Catacombs as an opener hit", exCfg.Presets[0].OpenerExtraHits.Select(t => t.Id).SequenceEqual(new[] { "TLC_451" }));
-		CheckTrue("preset deck: one-drop excludes = DMF_119 + TIME_026, extra hits = TLC_451", exCfg.Resolve("g-1", "Discardo", discardDeck).OneDropExclude.SetEquals(new[] { "DMF_119", "TIME_026" })
+		CheckTrue("preset deck: one-drop excludes = DMF_119 + TIME_026 + EX1_308, extra hits = TLC_451", exCfg.Resolve("g-1", "Discardo", discardDeck).OneDropExclude.SetEquals(new[] { "DMF_119", "TIME_026", "EX1_308" })
 			&& exCfg.Resolve("g-1", "Discardo", discardDeck).OpenerExtraHits.SetEquals(new[] { "TLC_451" }));
 		exCfg.SetDeckTargets("g-1", "Discardo", new[] { new TargetCard { Id = "RLK_534" } });
 		var exOwn = exCfg.Resolve("g-1", "Discardo", discardDeck);
-		CheckTrue("own target list without oneDropExclude / openerExtraHits still inherits the preset's", exOwn.Source == "deck" && exOwn.OneDropExclude.SetEquals(new[] { "DMF_119", "TIME_026" })
+		CheckTrue("own target list without oneDropExclude / openerExtraHits still inherits the preset's", exOwn.Source == "deck" && exOwn.OneDropExclude.SetEquals(new[] { "DMF_119", "TIME_026", "EX1_308" })
 			&& exOwn.OpenerExtraHits.SetEquals(new[] { "TLC_451" }));
 		exCfg.FindDeck("g-1", null).OneDropExclude = new List<TargetCard>();
 		CheckTrue("explicit empty oneDropExclude on the deck -> nothing excluded", exCfg.Resolve("g-1", "Discardo", discardDeck).OneDropExclude.Count == 0);
 		CheckTrue("unrelated deck: no one-drop exclusions", exCfg.Resolve("g-2", "Mage", new[] { "CS2_029" }).OneDropExclude.Count == 0);
 		var exRound = TargetConfig.Parse(exCfg.ToJson());
 		CheckTrue("oneDropExclude / openerExtraHits round-trip (preset lists + explicit empty deck list), no re-migration", !exRound.Migrated
-			&& exRound.Presets[0].OneDropExclude.Select(t => t.Id).SequenceEqual(new[] { "DMF_119", "TIME_026" }) && exRound.Presets[0].OpenerExtraHits.Single().Id == "TLC_451"
+			&& exRound.Presets[0].OneDropExclude.Select(t => t.Id).SequenceEqual(new[] { "DMF_119", "TIME_026", "EX1_308" }) && exRound.Presets[0].OpenerExtraHits.Single().Id == "TLC_451"
 			&& exRound.Decks[0].OneDropExclude != null && exRound.Decks[0].OneDropExclude.Count == 0);
 		var legacy = TargetConfig.Parse("{ \"presets\": [ { \"name\": \"Discard Warlock payoffs\", \"autoApplyMinMatches\": 3, \"targets\": [\"RLK_534\", \"RLK_532\", \"BT_300\"] }, { \"name\": \"Other\", \"targets\": [] } ] }");
 		CheckTrue("pre-v0.1.4 targets.json: built-in Discard preset gets the v0.1.5 defaults, others none",
-			legacy.Migrated && legacy.Presets[0].OneDropExclude.Select(t => t.Id).SequenceEqual(new[] { "DMF_119", "TIME_026" })
+			legacy.Migrated && legacy.Presets[0].OneDropExclude.Select(t => t.Id).SequenceEqual(new[] { "DMF_119", "TIME_026", "EX1_308" })
 			&& legacy.Presets[0].OpenerExtraHits.Single().Id == "TLC_451" && legacy.Presets[1].OneDropExclude == null && legacy.Presets[1].OpenerExtraHits == null);
 		// Ray's file as v0.1.4 saved it: version 1, preset with oneDropExclude [Wicked Whispers] only, own deck list.
 		var v014 = TargetConfig.Parse("{ \"version\": 1, \"decks\": [ { \"deckId\": \"d-1\", \"deckName\": \"Discardo\", \"targets\": [\"RLK_534\", \"RLK_532\", \"BT_300\"] } ], \"presets\": [ { \"name\": \"Discard Warlock payoffs\", \"autoApplyMinMatches\": 3, \"targets\": [\"RLK_534\", \"RLK_532\", \"BT_300\", \"CATA_499\", \"KAR_205\"], \"oneDropExclude\": [ { \"id\": \"DMF_119\", \"name\": \"Wicked Whispers\" } ] } ] }");
 		var v014r = v014.Resolve("d-1", "Discardo", discardDeck);
 		CheckTrue("v0.1.4 targets.json (Whispers only) picks up Entropic Continuity + Cursed Catacombs, own deck list kept",
-			v014.Migrated && v014r.Source == "deck" && v014r.OneDropExclude.SetEquals(new[] { "DMF_119", "TIME_026" }) && v014r.OpenerExtraHits.SetEquals(new[] { "TLC_451" })
+			v014.Migrated && v014r.Source == "deck" && v014r.OneDropExclude.SetEquals(new[] { "DMF_119", "TIME_026", "EX1_308" }) && v014r.OpenerExtraHits.SetEquals(new[] { "TLC_451" })
 			&& v014.Presets[0].OneDropExclude.Count(t => t.Id == "DMF_119") == 1);
 		var v2Edited = TargetConfig.Parse("{ \"version\": 2, \"presets\": [ { \"name\": \"Discard Warlock payoffs\", \"targets\": [], \"oneDropExclude\": [\"DMF_119\"] } ] }");
-		CheckTrue("version-2 file: user edits are left alone (no re-adding)", !v2Edited.Migrated && v2Edited.Presets[0].OneDropExclude.Count == 1 && v2Edited.Presets[0].OpenerExtraHits == null);
+		CheckTrue("version-2 file: only Soulfire is added once (removed defaults stay removed, no Catacombs re-added)", v2Edited.Migrated
+			&& v2Edited.Presets[0].OneDropExclude.Select(t => t.Id).SequenceEqual(new[] { "DMF_119", "EX1_308" }) && v2Edited.Presets[0].OpenerExtraHits == null);
+		var v2Ray = TargetConfig.Parse("{ \"version\": 2, \"decks\": [ { \"deckId\": \"d-1\", \"deckName\": \"Discardo\", \"targets\": [\"RLK_534\"] } ], \"presets\": [ { \"name\": \"Discard Warlock payoffs\", \"autoApplyMinMatches\": 3, \"targets\": [\"RLK_534\", \"RLK_532\", \"BT_300\"], \"oneDropExclude\": [\"DMF_119\", \"TIME_026\"], \"openerExtraHits\": [\"TLC_451\"] } ] }");
+		var v2RayR = v2Ray.Resolve("d-1", "Discardo", discardDeck);
+		CheckTrue("Ray's v0.1.7 targets.json (version 2) gets Soulfire excluded, Whispers/Entropic/Catacombs kept", v2Ray.Migrated
+			&& v2RayR.OneDropExclude.SetEquals(new[] { "DMF_119", "TIME_026", "EX1_308" }) && v2RayR.OpenerExtraHits.SetEquals(new[] { "TLC_451" }));
+		var v3 = TargetConfig.Parse(v2Ray.ToJson());
+		CheckTrue("version-3 file: left alone (no re-migration)", !v3.Migrated && v3.Presets[0].OneDropExclude.Count == 3);
+		var v3Edited = TargetConfig.Parse("{ \"version\": 3, \"presets\": [ { \"name\": \"Discard Warlock payoffs\", \"targets\": [], \"oneDropExclude\": [\"DMF_119\"] } ] }");
+		CheckTrue("version-3 file: user removal of Soulfire stays", !v3Edited.Migrated && v3Edited.Presets[0].OneDropExclude.Count == 1);
 		var tmp2 = Path.Combine(Path.GetTempPath(), "discardodds_test_" + Guid.NewGuid().ToString("N"));
 		var path2 = Path.Combine(tmp2, "targets.json");
 		Directory.CreateDirectory(tmp2);
 		File.WriteAllText(path2, "{ \"version\": 1, \"decks\": [], \"presets\": [ { \"name\": \"Discard Warlock payoffs\", \"autoApplyMinMatches\": 3, \"targets\": [\"RLK_534\"], \"oneDropExclude\": [\"DMF_119\"] } ] }");
 		var loaded2 = TargetConfig.Load(path2, out var err4);
 		var onDisk2 = TargetConfig.Parse(File.ReadAllText(path2));
-		CheckTrue("Load writes the upgraded file once (version 2, .bak kept)", err4 == null && File.Exists(path2 + ".bak") && !onDisk2.Migrated
-			&& File.ReadAllText(path2).Contains("\"version\": 2") && onDisk2.Presets[0].OneDropExclude.Any(t => t.Id == "TIME_026") && loaded2.Presets[0].OpenerExtraHits.Count == 1);
+		CheckTrue("Load writes the upgraded file once (version 3, .bak kept)", err4 == null && File.Exists(path2 + ".bak") && !onDisk2.Migrated
+			&& File.ReadAllText(path2).Contains("\"version\": 3") && onDisk2.Presets[0].OneDropExclude.Any(t => t.Id == "TIME_026") && loaded2.Presets[0].OpenerExtraHits.Count == 1);
 		try { Directory.Delete(tmp2, true); } catch { }
 		var handEx = TargetConfig.Parse("{ \"decks\": [ { \"deckName\": \"D\", \"targets\": [], \"oneDropExclude\": [\"DMF_119\", {\"id\": \"TLC_603\"}] } ] }");
 		CheckTrue("hand-written deck oneDropExclude (string ids and objects)", handEx.Resolve(null, "D", new string[0]).OneDropExclude.SetEquals(new[] { "DMF_119", "TLC_603" }));
@@ -500,9 +521,18 @@ internal static class Program
 
 		// ---- v0.1.6: new line toggles default on, round-trip through settings.ini
 		var dflt = PluginSettings.Parse(new string[0]);
-		CheckTrue("new line toggles default on", dflt.ShowSoulariumOdds && dflt.ShowSoulariumRisk && dflt.ShowSoulariumResult && dflt.ShowNextDraw && dflt.ShowPayoffsLeft && dflt.ShowLethalNextDraw);
-		var offs = PluginSettings.Parse(new[] { "SettingsVersion=2", "ShowSoulariumOdds=False", "ShowSoulariumRisk=False", "ShowSoulariumResult=False", "ShowNextDraw=False", "ShowPayoffsLeft=False", "ShowLethalNextDraw=False" });
-		CheckTrue("new line toggles parse False", !offs.ShowSoulariumOdds && !offs.ShowSoulariumRisk && !offs.ShowSoulariumResult && !offs.ShowNextDraw && !offs.ShowPayoffsLeft && !offs.ShowLethalNextDraw);
+		CheckTrue("new line toggles default on", dflt.ShowSoulariumOdds && dflt.ShowSoulariumRisk && dflt.ShowSoulariumResult && dflt.ShowNextDraw && dflt.ShowPayoffsLeft);
+		var offs = PluginSettings.Parse(new[] { "SettingsVersion=2", "ShowSoulariumOdds=False", "ShowSoulariumRisk=False", "ShowSoulariumResult=False", "ShowNextDraw=False", "ShowPayoffsLeft=False", "ShowLethalNextDraw=False" }); // old key from v0.1.6/7 is ignored
+		CheckTrue("new line toggles parse False", !offs.ShowSoulariumOdds && !offs.ShowSoulariumRisk && !offs.ShowSoulariumResult && !offs.ShowNextDraw && !offs.ShowPayoffsLeft);
+		CheckTrue("settings.ini no longer writes ShowLethalNextDraw", !offs.ToLines().Any(l => l.StartsWith("ShowLethalNextDraw")));
+
+		// ---- v0.1.8: master switch (default on, remembered) and auto-hide without targets
+		CheckTrue("master switch defaults on", PluginSettings.Parse(new string[0]).PluginEnabled);
+		var offMaster = PluginSettings.Parse(new[] { "PluginEnabled=False" });
+		CheckTrue("master switch off is remembered (parse + ToLines round-trip)", !offMaster.PluginEnabled && !PluginSettings.Parse(offMaster.ToLines()).PluginEnabled);
+		CheckTrue("widget visible: master off hides it everywhere, even unlocked", !WidgetPolicy.Visible(false, true, true, true, true));
+		CheckTrue("widget visible: on + in game", WidgetPolicy.Visible(true, true, true, false, false) && !WidgetPolicy.Visible(true, false, true, false, false) && !WidgetPolicy.Visible(true, true, false, false, false));
+		CheckTrue("no targets and no preset: hidden unless unlocked", WidgetPolicy.HideForNoTargets(0, false) && !WidgetPolicy.HideForNoTargets(0, true) && !WidgetPolicy.HideForNoTargets(3, false));
 
 		// ---- v0.1.7: replay (Power.log) reader: opening hand after the mulligan, cards drawn / played later
 		string G(string x) => "D 21:00:00.0000000 GameState.DebugPrintPower() - " + x;

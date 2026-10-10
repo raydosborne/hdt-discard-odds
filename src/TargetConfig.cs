@@ -67,18 +67,19 @@ namespace DiscardOdds
 
 	public sealed class TargetConfig
 	{
-		/// <summary>2 = v0.1.5 (Entropic Continuity excluded, Cursed Catacombs counted for the Discard preset).</summary>
-		public const int CurrentVersion = 2;
+		/// <summary>2 = v0.1.5 (Entropic Continuity excluded, Cursed Catacombs counted for the Discard preset); 3 = v0.1.8 (Soulfire excluded).</summary>
+		public const int CurrentVersion = 3;
 		public const string DiscardPresetName = "Discard Warlock payoffs";
 
 		/// <summary>True when Parse upgraded an older file in memory (Load then writes it back, keeping a .bak).</summary>
 		public bool Migrated;
 
-		/// <summary>Default one-drop exclusions for the built-in Discard preset: Wicked Whispers, Entropic Continuity.</summary>
+		/// <summary>Default one-drop exclusions for the built-in Discard preset: Wicked Whispers, Entropic Continuity, Soulfire.</summary>
 		public static List<TargetCard> DefaultDiscardOneDropExclude() => new List<TargetCard>
 		{
 			new TargetCard { Id = "DMF_119", Name = "Wicked Whispers" },
 			new TargetCard { Id = "TIME_026", Name = "Entropic Continuity" },
+			new TargetCard { Id = "EX1_308", Name = "Soulfire" },
 		};
 
 		/// <summary>Default extra opener hits for the built-in Discard preset: Cursed Catacombs (0 Cost).</summary>
@@ -195,17 +196,19 @@ namespace DiscardOdds
 						OneDropExclude = CardsOrNull(o, "oneDropExclude"),
 						OpenerExtraHits = CardsOrNull(o, "openerExtraHits")
 					});
-			// Older files (version 1: v0.1.4 and earlier): the built-in Discard preset gets the v0.1.5 defaults. Missing
-			// exclusions (Wicked Whispers, Entropic Continuity) are added to any list it already has; Cursed Catacombs is
-			// added as an extra opener hit if the preset has no "openerExtraHits" yet. From version 2 on, the file is left as is.
+			// Older files (version 1: v0.1.4 and earlier; version 2: v0.1.5-v0.1.7): the built-in Discard preset gets the current
+			// defaults once. Missing exclusions (Wicked Whispers, Entropic Continuity, Soulfire) are added to any list it already has; Cursed Catacombs is
+			// added as an extra opener hit if the preset has no "openerExtraHits" yet. From version 3 on, the file is left as is.
 			if(fileVersion < CurrentVersion)
 			{
 				foreach(var p in cfg.Presets.Where(p => p.Name == DiscardPresetName))
 				{
 					if(p.OneDropExclude == null) p.OneDropExclude = new List<TargetCard>();
-					foreach(var d in DefaultDiscardOneDropExclude().Where(d => p.OneDropExclude.All(x => x.Id != d.Id)))
+					// A version-2 file only gets Soulfire (v0.1.8); earlier removals of the v0.1.5 defaults stay removed.
+					var add = fileVersion >= 2 ? DefaultDiscardOneDropExclude().Where(d => d.Id == "EX1_308") : DefaultDiscardOneDropExclude();
+					foreach(var d in add.Where(d => p.OneDropExclude.All(x => x.Id != d.Id)).ToList())
 						p.OneDropExclude.Add(d);
-					if(p.OpenerExtraHits == null) p.OpenerExtraHits = DefaultDiscardOpenerExtraHits();
+					if(fileVersion < 2 && p.OpenerExtraHits == null) p.OpenerExtraHits = DefaultDiscardOpenerExtraHits();
 				}
 				cfg.Migrated = true;
 			}

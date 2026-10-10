@@ -87,6 +87,9 @@ namespace DiscardOdds
 	/// </summary>
 	public static class LethalEngine
 	{
+		/// <summary>v0.1.8 widget text: the single word "LETHAL" when lethal, otherwise nothing (null hides the line).</summary>
+		public static string WidgetText(LethalResult r) => r != null && r.Lethal ? "LETHAL" : null;
+
 		private static readonly Regex Tags = new Regex(@"<[^>]+>|\[x\]", RegexOptions.CultureInvariant);
 		private static readonly Regex Space = new Regex(@"\s+", RegexOptions.CultureInvariant);
 		private static readonly Regex DealRx = new Regex(@"\bdeal (\$?)(\d+) damage([^.;]*)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);

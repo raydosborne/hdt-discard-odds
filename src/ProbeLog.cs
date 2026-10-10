@@ -232,6 +232,7 @@ namespace DiscardOdds
 		public bool VerboseDeckDump = true;        // full PlayerCardList dump at game start / mulligan / each own turn
 		public bool CheckForUpdates = true;        // on HDT start, ask this repo's GitHub Releases for the latest version
 		public bool AutoUpdate = true;             // ...and if newer, download + verify it; it's swapped in on the next HDT restart
+		public bool PluginEnabled = true;          // v0.1.8 master switch (first menu item): off = widget hidden, no odds/lethal work
 		public bool ShowLethalCheck = true;        // "Face damage: X vs Y health" line on your turn
 		public bool ShowDetails = false;           // dim second line with the reason behind each number (default OFF)
 		public bool ShowOneDrop = true;            // opening one-drop odds (mulligan + your turn 1 only)
@@ -242,7 +243,6 @@ namespace DiscardOdds
 		public bool ShowSoulariumResult = true;    // "Soularium → 2 discard cards: 30% chance" (rest of that turn)
 		public bool ShowNextDraw = true;           // "Next draw: Discard 33% · Playable 60%"
 		public bool ShowPayoffsLeft = true;        // "5 discard cards left"
-		public bool ShowLethalNextDraw = true;     // "Lethal next draw ~12%" under a short lethal check
 		/// <summary>2 = v0.1.5. Files from older versions get ShowDetails reset to off once (it is still in the menu).</summary>
 		public const int CurrentSettingsVersion = 2;
 		public int SettingsVersion = CurrentSettingsVersion;
@@ -290,6 +290,7 @@ namespace DiscardOdds
 						case nameof(VerboseDeckDump): s.VerboseDeckDump = ParseB(v, s.VerboseDeckDump); break;
 						case nameof(CheckForUpdates): s.CheckForUpdates = ParseB(v, s.CheckForUpdates); break;
 						case nameof(AutoUpdate): s.AutoUpdate = ParseB(v, s.AutoUpdate); break;
+						case nameof(PluginEnabled): s.PluginEnabled = ParseB(v, s.PluginEnabled); break;
 						case nameof(ShowLethalCheck): s.ShowLethalCheck = ParseB(v, s.ShowLethalCheck); break;
 						case nameof(ShowDetails): s.ShowDetails = ParseB(v, s.ShowDetails); break;
 						case nameof(ShowOneDrop): s.ShowOneDrop = ParseB(v, s.ShowOneDrop); break;
@@ -299,7 +300,6 @@ namespace DiscardOdds
 						case nameof(ShowSoulariumResult): s.ShowSoulariumResult = ParseB(v, s.ShowSoulariumResult); break;
 						case nameof(ShowNextDraw): s.ShowNextDraw = ParseB(v, s.ShowNextDraw); break;
 						case nameof(ShowPayoffsLeft): s.ShowPayoffsLeft = ParseB(v, s.ShowPayoffsLeft); break;
-						case nameof(ShowLethalNextDraw): s.ShowLethalNextDraw = ParseB(v, s.ShowLethalNextDraw); break;
 						case nameof(SettingsVersion): fileVersion = int.TryParse(v, NumberStyles.Integer, CultureInfo.InvariantCulture, out var fv) ? fv : 1; break;
 					}
 				}
@@ -329,13 +329,25 @@ namespace DiscardOdds
 			try
 			{
 				Directory.CreateDirectory(ProbeLog.RootDir);
-				File.WriteAllLines(PathOnDisk, new[]
+				File.WriteAllLines(PathOnDisk, ToLines());
+			}
+			catch(Exception ex)
+			{
+				ProbeLog.Line("SETTINGS", "save failed: " + ex.Message);
+			}
+		}
+
+		/// <summary>The settings.ini lines (pure; Save writes them).</summary>
+		public string[] ToLines()
+		{
+				return new[]
 				{
 					"# Discard Odds settings. Fractions are relative to the HDT overlay size.",
 					$"{nameof(SettingsVersion)}={SettingsVersion}",
 					$"{nameof(WidgetLeftFraction)}={WidgetLeftFraction.ToString("0.####", CultureInfo.InvariantCulture)}",
 					$"{nameof(WidgetTopFraction)}={WidgetTopFraction.ToString("0.####", CultureInfo.InvariantCulture)}",
 					$"{nameof(WidgetPositionSaved)}={WidgetPositionSaved}",
+					$"{nameof(PluginEnabled)}={PluginEnabled}",
 					$"{nameof(WidgetEnabled)}={WidgetEnabled}",
 					$"{nameof(ShowInMenus)}={ShowInMenus}",
 					$"{nameof(VerboseDeckDump)}={VerboseDeckDump}",
@@ -348,17 +360,11 @@ namespace DiscardOdds
 					$"{nameof(ShowSoulariumResult)}={ShowSoulariumResult}",
 					$"{nameof(ShowNextDraw)}={ShowNextDraw}",
 					$"{nameof(ShowPayoffsLeft)}={ShowPayoffsLeft}",
-					$"{nameof(ShowLethalNextDraw)}={ShowLethalNextDraw}",
 					"# Updates: CheckForUpdates asks github.com/" + UpdateLogic.Owner + "/" + UpdateLogic.Repo + " for the latest release on HDT start.",
 					"# AutoUpdate also downloads it (SHA-256 verified); it is swapped in when HDT restarts. Set either to False to opt out.",
 					$"{nameof(CheckForUpdates)}={CheckForUpdates}",
 					$"{nameof(AutoUpdate)}={AutoUpdate}"
-				});
-			}
-			catch(Exception ex)
-			{
-				ProbeLog.Line("SETTINGS", "save failed: " + ex.Message);
-			}
+				};
 		}
 
 		/// <summary>Back to the built-in default position (used by "Reset widget position").</summary>

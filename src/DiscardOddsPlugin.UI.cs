@@ -18,7 +18,7 @@ namespace DiscardOdds
 
 		/// <summary>
 		/// Opening line (mulligan + your turn 1 only): the chance of having a turn-1 play, i.e. a 1-Cost card that isn't in
-		/// the deck's "oneDropExclude" list (Discard preset: Wicked Whispers, Entropic Continuity) or one of its
+		/// the deck's "oneDropExclude" list (Discard preset: Wicked Whispers, Entropic Continuity, Soulfire) or one of its
 		/// "openerExtraHits" (Discard preset: Cursed Catacombs). Odds use OneDropOdds (tossed cards can't come back as their
 		/// own replacements). After the turn-1 draw: "✓" if you have one, else "Missed: X% chance" (how likely that miss was,
 		/// given your mulligan). Hidden once your turn 1 is over.
@@ -104,16 +104,16 @@ namespace DiscardOdds
 				var input = GameReader.BuildLethalInput(_probes.LastHand);
 				if(input == null) { _widget.SetLethal(null, null, false); return; }
 				var r = LethalEngine.Compute(input);
-				// "Lethal next draw ~X%": only under a short check (not lethal, enemy not Immune), as an estimate.
+				// v0.1.8: the widget shows only "LETHAL" (or nothing). The next-draw estimate is still written to the [LETHAL] log line.
 				NextDrawLethalResult nd = null;
-				if(_settings.ShowLethalNextDraw && !r.Lethal && !input.OppImmune && r.Target > 0)
+				if(!r.Lethal && !input.OppImmune && r.Target > 0)
 				{
 					var next = GameReader.BuildNextTurnLethalInput(input);
 					var deckCount = Math.Max(0, (GameReader.Player?.DeckCount ?? 0) - GameReader.CastsWhenDrawnInDeck());
 					if(next != null && deckCount > 0)
 						nd = LethalEngine.NextDrawLethal(next, GameReader.DeckLethalCards(input.SpellDamage, input.EnemyBoardEmpty), deckCount);
 				}
-				_widget.SetLethal(r.Line, r.Detail, r.Lethal, nd?.Segments, nd?.Detail);
+				_widget.SetLethal(LethalEngine.WidgetText(r), null, r.Lethal);
 				var log = $"{r.Line} | {r.Detail} | mana {input.Mana} | attackers [{string.Join(", ", input.Minions.Select(a => $"{a.Name} {a.Attack}x{a.Attacks}"))}] hero {input.HeroAttack}x{input.HeroAttacksLeft} | hand [{string.Join(", ", input.Hand.Select(h => $"{h.Name} c{h.Cost} {h.Damage}{(h.IsWeapon ? "w" : "")}"))}]"
 				          + (nd != null ? $" || {nd.Line} | {nd.Detail}" : "");
 				if(log != _lastLethalLog) { _lastLethalLog = log; ProbeLog.Line("LETHAL", log); }
@@ -174,22 +174,34 @@ namespace DiscardOdds
 			var checkNow = new MenuItem { Header = "Check for updates now" };
 			checkNow.Click += (s, e) => _updater?.CheckInBackground(_settings?.AutoUpdate ?? true, true);
 			// Every optional widget line has its own toggle here (all on by default).
-			var lines = new MenuItem { Header = "Widget lines" };
+			// v0.1.8: no nested submenu (it didn't open inside HDT): the toggles sit in the main menu under a disabled header.
+			var lines = new List<MenuItem>();
 			MenuItem Toggle(string header, Func<PluginSettings, bool> get, Action<PluginSettings, bool> set)
 			{
 				var item = new MenuItem { Header = header, IsCheckable = true, IsChecked = _settings == null || get(_settings) };
 				item.Click += (s, e) => { if(_settings == null) return; set(_settings, item.IsChecked); _settings.Save(); UpdateWidget(true); };
-				lines.Items.Add(item);
+				lines.Add(item);
 				return item;
 			}
-			Toggle("Discard cards left (\"5 discard cards left\")", x => x.ShowPayoffsLeft, (x, v) => x.ShowPayoffsLeft = v);
-			Toggle("Next draw (discard / playable)", x => x.ShowNextDraw, (x, v) => x.ShowNextDraw = v);
-			Toggle("Soularium odds (1+ / 2+ / 3/3 / whiff)", x => x.ShowSoulariumOdds, (x, v) => x.ShowSoulariumOdds = v);
-			Toggle("Soularium risk (discard / waste)", x => x.ShowSoulariumRisk, (x, v) => x.ShowSoulariumRisk = v);
-			Toggle("Soularium result (that turn)", x => x.ShowSoulariumResult, (x, v) => x.ShowSoulariumResult = v);
-			Toggle("Lethal next draw (estimate)", x => x.ShowLethalNextDraw, (x, v) => x.ShowLethalNextDraw = v);
+			Toggle("  Discard cards left (\"5 discard cards left\")", x => x.ShowPayoffsLeft, (x, v) => x.ShowPayoffsLeft = v);
+			Toggle("  Next draw (discard / playable)", x => x.ShowNextDraw, (x, v) => x.ShowNextDraw = v);
+			Toggle("  Soularium odds (1+ / 2+ / 3/3 / whiff)", x => x.ShowSoulariumOdds, (x, v) => x.ShowSoulariumOdds = v);
+			Toggle("  Soularium risk (discard / waste)", x => x.ShowSoulariumRisk, (x, v) => x.ShowSoulariumRisk = v);
+			Toggle("  Soularium result (that turn)", x => x.ShowSoulariumResult, (x, v) => x.ShowSoulariumResult = v);
 			var releases = new MenuItem { Header = "Open releases page" };
 			releases.Click += (s, e) => OpenUrl(UpdateLogic.ReleasesPage);
+			var master = new MenuItem { Header = "Plugin ON (uncheck to turn off for non-discard decks)", IsCheckable = true, IsChecked = _settings?.PluginEnabled ?? true, FontWeight = FontWeights.Bold };
+			master.Click += (s, e) =>
+			{
+				if(_settings == null) return;
+				_settings.PluginEnabled = master.IsChecked;
+				_settings.Save();
+				ProbeLog.Line("PLUGIN", "master switch " + (master.IsChecked ? "ON" : "OFF"));
+				if(master.IsChecked) RefreshTargets(true);
+				UpdateWidget(true);
+			};
+			root.Items.Add(master);
+			root.Items.Add(new Separator());
 			root.Items.Add(_updateItem);
 			root.Items.Add(targets);
 			root.Items.Add(reload);
@@ -202,8 +214,10 @@ namespace DiscardOdds
 			root.Items.Add(compact);
 			root.Items.Add(lethal);
 			root.Items.Add(oneDrop);
-			root.Items.Add(lines);
 			root.Items.Add(reset);
+			root.Items.Add(new Separator());
+			root.Items.Add(new MenuItem { Header = "Widget lines:", IsEnabled = false, FontWeight = FontWeights.Bold });
+			foreach(var l in lines) root.Items.Add(l);
 			root.Items.Add(new Separator());
 			root.Items.Add(dump);
 			root.Items.Add(open);

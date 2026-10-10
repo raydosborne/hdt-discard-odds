@@ -246,28 +246,12 @@ namespace DiscardOdds
 			Canvas.SetTop(this, Clamp(_settings.WidgetTopFraction, 0, 0.98) * h);
 		}
 
-		/// <summary>Lethal-check line (null hides it): bold bright yellow (one size up) when lethal, red when short. Detail only with "Show details".</summary>
-		public void SetLethal(string line, string detail, bool lethal, List<(string text, SegKind kind)> next = null, string nextDetail = null)
+		/// <summary>Lethal line (null hides it): v0.1.8 shows only the word "LETHAL", bold bright yellow, one size up. No numbers, no detail.</summary>
+		public void SetLethal(string line, string detail, bool lethal)
 		{
-			if(line == null) { _lethal.Visibility = Visibility.Collapsed; return; }
+			if(line == null || !lethal) { _lethal.Visibility = Visibility.Collapsed; return; }
 			_lethal.Inlines.Clear();
-			_lethal.Inlines.Add(new Run(line)
-			{
-				FontWeight = lethal ? FontWeights.ExtraBold : FontWeights.Bold,
-				Foreground = lethal ? WidgetColors.Lethal : WidgetColors.Miss,
-				FontSize = _lethal.FontSize + (lethal ? 1.5 : 0)
-			});
-			if(_settings.ShowDetails && !string.IsNullOrEmpty(detail))
-				_lethal.Inlines.Add(new Run("\n " + detail) { FontSize = _settings.CompactMode ? 9 : 10.5, FontWeight = FontWeights.Normal, Foreground = WidgetColors.Dim });
-			if(next != null && next.Count > 0)
-			{
-				// "Lethal next draw ~12%" on its own line under a short lethal check (an estimate, row-sized).
-				var size = _settings.CompactMode ? 11 : 12.5;
-				_lethal.Inlines.Add(new Run("\n") { FontSize = size });
-				AddSegments(_lethal.Inlines, next, size, _settings.CompactMode ? 0.5 : 1.0);
-				if(_settings.ShowDetails && !string.IsNullOrEmpty(nextDetail))
-					_lethal.Inlines.Add(new Run("\n " + nextDetail) { FontSize = _settings.CompactMode ? 9 : 10.5, FontWeight = FontWeights.Normal, Foreground = WidgetColors.Dim });
-			}
+			_lethal.Inlines.Add(new Run(line) { FontWeight = FontWeights.ExtraBold, Foreground = WidgetColors.Lethal, FontSize = _lethal.FontSize + 1.5 });
 			_lethal.Visibility = Visibility.Visible;
 		}
 

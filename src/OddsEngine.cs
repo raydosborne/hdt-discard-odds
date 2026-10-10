@@ -306,6 +306,17 @@ namespace DiscardOdds
 		/// Odds for every odds card currently in hand (one line per distinct card id, never two for one entity): card-specific rules first,
 		/// then generic "draw N" rules from the card text (via s.CardText).
 		/// </summary>
+		/// <summary>
+		/// v0.1.8: an equipped discard weapon (Chronoclaws) — what its next hero attack would discard from the current hand,
+		/// with the same rule and format as the in-hand line. The whole hand counts (the weapon is no longer in it).
+		/// Null when the weapon has no rule.
+		/// </summary>
+		public static CardOdds ForEquippedWeapon(OddsState s, string weaponCardId, IDictionary<string, OddsRule> rules)
+		{
+			if(weaponCardId == null || rules == null || !rules.TryGetValue(weaponCardId, out var rule)) return null;
+			return Compute(rule, s, 0);
+		}
+
 		public static List<CardOdds> ForHand(OddsState s, IDictionary<string, OddsRule> rules)
 		{
 			var result = new List<CardOdds>();

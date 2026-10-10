@@ -13,6 +13,14 @@ namespace DiscardOdds
 	/// </summary>
 	public static class WidgetPolicy
 	{
+		/// <summary>v0.1.8: is the widget shown at all? Master switch off = never. Otherwise the "Show widget" switch, and in game
+		/// (or in menus with ShowInMenus, or while unlocked for moving). Unlocked always shows it so it can be dragged.</summary>
+		public static bool Visible(bool pluginEnabled, bool widgetEnabled, bool inGame, bool showInMenus, bool unlocked) =>
+			pluginEnabled && widgetEnabled && (inGame || showInMenus || unlocked);
+
+		/// <summary>v0.1.8: in game with no targets for the deck (no own list, no matching preset): hide the box, unless unlocked.</summary>
+		public static bool HideForNoTargets(int targetCount, bool unlocked) => targetCount == 0 && !unlocked;
+
 		/// <summary>
 		/// Never on the widget, in any mode, not even with Show details: cards where you pick the discard yourself
 		/// (Ocular Occultist, Gemstone Hoarder), and Hand of Gul'dan (removed completely in v0.1.5).

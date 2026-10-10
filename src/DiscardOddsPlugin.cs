@@ -63,7 +63,8 @@ namespace DiscardOdds
 			// Subscribe from inside the IPlugin class (ActionList.Add identifies the plugin by the caller's type).
 			var gen = Interlocked.Increment(ref s_generation);
 			ProbeLog.Line("PLUGIN", $"event handlers registered (generation {gen}; earlier generations are inert)");
-			void On(Action a) { if(gen == Volatile.Read(ref s_generation)) Guard(a); }
+			// Master switch off: game events do nothing (no odds, predictions or lethal work); OnUpdate keeps the widget hidden.
+			void On(Action a) { if(gen == Volatile.Read(ref s_generation) && (_settings?.PluginEnabled ?? true)) Guard(a); }
 			GameEvents.OnGameStart.Add(() => On(() =>
 			{
 				if((DateTime.Now - _lastGameStart).TotalSeconds < 1) return; // guard against a doubled game-start event
@@ -151,7 +152,7 @@ namespace DiscardOdds
 			if(!_enabled) return;
 			Guard(() =>
 			{
-				_probes.Tick();
+				if(_settings?.PluginEnabled ?? true) _probes.Tick();
 				UpdateWidget(false);
 				ProbeLog.Flush();
 			});
@@ -231,7 +232,7 @@ namespace DiscardOdds
 			{
 				var game = HdtApi.Core.Game;
 				var inGame = game != null && !game.IsInMenu && game.Player != null;
-				var visible = _settings.WidgetEnabled && (inGame || _settings.ShowInMenus || _widget.Unlocked);
+				var visible = WidgetPolicy.Visible(_settings.PluginEnabled, _settings.WidgetEnabled, inGame, _settings.ShowInMenus, _widget.Unlocked);
 				_widget.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
 				if(!visible) return;
 				if(!inGame)
@@ -258,6 +259,8 @@ namespace DiscardOdds
 				AddOneDropRows(oneDrop);
 				if(Targets.Current.Count == 0)
 				{
+					// v0.1.8: no targets and no matching preset -> not a deck this plugin is for: hide the box (shown while unlocked).
+					if(WidgetPolicy.HideForNoTargets(Targets.Current.Count, _widget.Unlocked)) { _widget.Visibility = Visibility.Collapsed; return; }
 					Show("No target cards set for this deck", "Plugins → Discard Odds → Choose target cards…", oneDrop);
 					return;
 				}
@@ -288,6 +291,14 @@ namespace DiscardOdds
 				var payoffsInDeck = state.Deck.Where(kv => state.Group.Contains(kv.Key)).Sum(kv => kv.Value);
 				var rowEntities = new HashSet<int>();
 				var rowCards = new HashSet<string>();
+				// Chronoclaws equipped: "→ the card the next hero attack discards", refreshed after every attack (hand change / tick);
+				// gone with the weapon. Takes the place of an in-hand Chronoclaws line (one line per card).
+				if(GameReader.HasWeaponEquipped(CardIds.Chronoclaws))
+				{
+					var eq = OddsEngine.ForEquippedWeapon(state, CardIds.Chronoclaws, OddsRule.CardRules);
+					if(eq != null && rowCards.Add(eq.CardId))
+						c.Rows.Add(new WidgetRow { CardId = eq.CardId, Name = eq.Name, Hit = eq.Hit, Approx = eq.Approx, Detail = "equipped: next hero attack · " + eq.Detail, DiscardRule = eq.DiscardRule, DiscardNames = eq.DiscardNames, NoOdds = eq.NoOdds });
+				}
 				foreach(var o in OddsEngine.ForHand(state, OddsRule.CardRules))
 				{
 					var place = WidgetPolicy.Place(o);
